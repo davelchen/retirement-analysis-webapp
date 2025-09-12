@@ -28,6 +28,111 @@ from io_utils import (
 
 def initialize_session_state():
     """Initialize session state variables with defaults for hypothetical CA family ($250K income)"""
+    
+    # Try to load default.json if it exists
+    try:
+        import os
+        if os.path.exists('default.json'):
+            with open('default.json', 'r') as f:
+                json_str = f.read()
+            
+            from io_utils import validate_parameters_json, parse_parameters_upload_json
+            is_valid, error = validate_parameters_json(json_str)
+            
+            if is_valid:
+                params = parse_parameters_upload_json(json_str)
+                
+                # Load parameters from default.json
+                loaded_defaults = {
+                    # Core setup
+                    'start_year': params.start_year,
+                    'horizon_years': params.horizon_years,
+                    'num_sims': params.num_sims,
+                    'random_seed': params.random_seed,
+                    
+                    # Start capital
+                    'capital_preset': 'Custom',
+                    'custom_capital': params.start_capital,
+                    'use_custom_capital': True,
+                    
+                    # Allocation weights
+                    'w_equity': params.w_equity,
+                    'w_bonds': params.w_bonds,
+                    'w_real_estate': params.w_real_estate,
+                    'w_cash': params.w_cash,
+                    
+                    # Return model
+                    'equity_mean': params.equity_mean,
+                    'equity_vol': params.equity_vol,
+                    'bonds_mean': params.bonds_mean,
+                    'bonds_vol': params.bonds_vol,
+                    'real_estate_mean': params.real_estate_mean,
+                    'real_estate_vol': params.real_estate_vol,
+                    'cash_mean': params.cash_mean,
+                    'cash_vol': params.cash_vol,
+                    
+                    # CAPE and spending
+                    'cape_now': params.cape_now,
+                    'lower_wr': params.lower_wr,
+                    'upper_wr': params.upper_wr,
+                    'adjustment_pct': params.adjustment_pct,
+                    'spending_floor_real': params.spending_floor_real,
+                    'spending_ceiling_real': params.spending_ceiling_real,
+                    'floor_end_year': params.floor_end_year,
+                    
+                    # College expenses
+                    'college_growth_real': params.college_growth_real,
+                    
+                    # Multi-year expenses
+                    'onetime_expenses': params.expense_streams or [],
+                    
+                    # Real estate cash flow
+                    're_flow_preset': params.re_flow_preset,
+                    
+                    # Inheritance
+                    'inherit_amount': params.inherit_amount,
+                    'inherit_year': params.inherit_year,
+                    
+                    # Other income streams
+                    'other_income_streams': [
+                        {
+                            'amount': params.other_income_amount,
+                            'start_year': params.other_income_start_year,
+                            'years': params.other_income_years,
+                            'description': 'Loaded from default.json'
+                        }
+                    ] if params.other_income_amount > 0 and params.other_income_years > 0 else [],
+                    
+                    # Currency view
+                    'currency_view': 'Real',
+                    'inflation_rate': 0.028,
+                    
+                    # Tax parameters
+                    'filing_status': params.filing_status,
+                    'standard_deduction': params.standard_deduction,
+                    'bracket_1_threshold': params.tax_brackets[0][0] if params.tax_brackets and len(params.tax_brackets) >= 1 else 0,
+                    'bracket_1_rate': params.tax_brackets[0][1] if params.tax_brackets and len(params.tax_brackets) >= 1 else 0.10,
+                    'bracket_2_threshold': params.tax_brackets[1][0] if params.tax_brackets and len(params.tax_brackets) >= 2 else 94_300,
+                    'bracket_2_rate': params.tax_brackets[1][1] if params.tax_brackets and len(params.tax_brackets) >= 2 else 0.22,
+                    'bracket_3_threshold': params.tax_brackets[2][0] if params.tax_brackets and len(params.tax_brackets) >= 3 else 201_000,
+                    'bracket_3_rate': params.tax_brackets[2][1] if params.tax_brackets and len(params.tax_brackets) >= 3 else 0.24,
+                    
+                    # Regime
+                    'regime': params.regime,
+                    
+                    # Results caching
+                    'simulation_results': None,
+                    'deterministic_results': None,
+                    'last_params_hash': None,
+                }
+            else:
+                # If validation fails, use hardcoded defaults
+                raise ValueError(f"Invalid default.json: {error}")
+    except Exception as e:
+        # If any error occurs (file doesn't exist, invalid JSON, etc.), use hardcoded defaults
+        loaded_defaults = {}
+    
+    # Fallback defaults (used if default.json doesn't exist or fails to load)
     defaults = {
         # Core setup
         'start_year': 2026,
@@ -111,7 +216,10 @@ def initialize_session_state():
         'last_params_hash': None,
     }
     
-    for key, value in defaults.items():
+    # Use loaded_defaults if available, otherwise use fallback defaults
+    final_defaults = loaded_defaults if 'loaded_defaults' in locals() and loaded_defaults else defaults
+    
+    for key, value in final_defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 

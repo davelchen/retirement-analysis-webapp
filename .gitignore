@@ -1,5 +1,5 @@
 # Personal/confidential data files
-dave_defaults_recession_model.json
+default.json
 *_personal_*.json
 *_confidential_*.json
 

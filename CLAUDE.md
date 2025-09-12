@@ -70,10 +70,11 @@ Every parameter includes detailed explanations with usage guidance and examples.
 JSON save/load for scenario comparison and reproducible results.
 - Save: Download parameters JSON via button
 - Load: Upload JSON file, then click "Load Parameters" button for confirmation
+- Auto-load: Place personal config in `default.json` for automatic startup loading
 
 ### Privacy Protection
 Personal configuration files ignored in git:
-- `dave_defaults_recession_model.json` (personal data)
+- `default.json` (personal configuration, auto-loaded on startup)
 - `*_personal_*.json`, `*_confidential_*.json` patterns
 - Simulation output files
 
@@ -164,3 +165,10 @@ This project demonstrates comprehensive financial modeling with professional sof
 - **Added**: Load Parameters confirmation button (no auto-loading)
 - **Fixed**: Complete parameter mapping for all SimulationParams fields
 - **UI**: Shows file info before user confirms loading
+
+### Automatic Default Configuration (Latest)
+- **Auto-load**: App automatically loads `default.json` on startup if it exists
+- **Fallback**: Uses hardcoded defaults if `default.json` missing or invalid
+- **Privacy**: `default.json` ignored by git for personal data protection
+- **Seamless**: No UI changes required - parameters load transparently
+- **Backward compatible**: Works with or without `default.json`
