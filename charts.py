@@ -7,6 +7,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import numpy as np
 import pandas as pd
+from scipy import stats
 from typing import Dict, List, Optional, Tuple
 
 
@@ -14,7 +15,7 @@ def create_terminal_wealth_distribution(terminal_wealth: np.ndarray,
                                       title: str = "Terminal Wealth Distribution",
                                       currency_format: str = "real") -> go.Figure:
     """
-    Create histogram showing distribution of terminal wealth outcomes.
+    Create detailed histogram showing distribution of terminal wealth outcomes with high resolution.
     
     Args:
         terminal_wealth: Array of terminal wealth values from simulation
@@ -27,39 +28,137 @@ def create_terminal_wealth_distribution(terminal_wealth: np.ndarray,
     # Convert to millions for readability
     wealth_millions = terminal_wealth / 1_000_000
     
+    # Calculate detailed statistics
+    percentiles = [5, 10, 25, 50, 75, 90, 95]
+    perc_values = np.percentile(wealth_millions, percentiles)
+    mean_val = np.mean(wealth_millions)
+    std_val = np.std(wealth_millions)
+    
+    # Determine optimal bin count based on data range and size
+    n_bins = min(200, max(100, int(np.sqrt(len(wealth_millions)) * 2)))
+    
     fig = go.Figure()
     
+    # Add high-resolution histogram
     fig.add_trace(go.Histogram(
         x=wealth_millions,
-        nbinsx=50,
+        nbinsx=n_bins,
         name="Terminal Wealth",
-        hovertemplate="<b>Wealth Range:</b> $%{x:.1f}M - $%{x:.1f}M<br>" +
-                     "<b>Number of Simulations:</b> %{y}<br>" +
+        hovertemplate="<b>Wealth Range:</b> $%{x:.2f}M<br>" +
+                     "<b>Simulations:</b> %{y}<br>" +
+                     "<b>Probability:</b> %{y}/" + f"{len(wealth_millions)} = " +
+                     "%{customdata:.1%}<br>" +
                      "<extra></extra>",
-        marker=dict(color='lightblue', line=dict(color='darkblue', width=1))
+        customdata=np.ones(len(wealth_millions)) / len(wealth_millions),
+        marker=dict(
+            color='lightblue', 
+            line=dict(color='darkblue', width=0.5),
+            opacity=0.8
+        )
     ))
     
-    # Add percentile lines
-    p10 = np.percentile(wealth_millions, 10)
-    p50 = np.percentile(wealth_millions, 50)
-    p90 = np.percentile(wealth_millions, 90)
+    # Add density curve overlay (only if we have enough data points and variance)
+    if len(wealth_millions) > 1 and np.var(wealth_millions) > 0:
+        try:
+            from scipy import stats
+            kde = stats.gaussian_kde(wealth_millions)
+            x_range = np.linspace(wealth_millions.min(), wealth_millions.max(), 500)
+            density = kde(x_range)
+            
+            # Scale density to match histogram height
+            hist_max = np.histogram(wealth_millions, bins=n_bins)[0].max()
+            if hist_max > 0 and density.max() > 0:
+                density_scaled = density * hist_max / density.max() * 0.8
+                
+                fig.add_trace(go.Scatter(
+                    x=x_range,
+                    y=density_scaled,
+                    mode='lines',
+                    name='Density Curve',
+                    line=dict(color='darkred', width=3),
+                    hovertemplate="<b>Wealth:</b> $%{x:.2f}M<br>" +
+                                 "<b>Density:</b> %{y:.1f}<br>" +
+                                 "<extra></extra>",
+                    yaxis='y2'
+                ))
+        except (ValueError, np.linalg.LinAlgError):
+            # Skip density curve if KDE fails
+            pass
     
-    fig.add_vline(x=p10, line_dash="dash", line_color="red", 
-                 annotation_text=f"P10: ${p10:.1f}M")
-    fig.add_vline(x=p50, line_dash="dash", line_color="green", 
-                 annotation_text=f"P50: ${p50:.1f}M")
-    fig.add_vline(x=p90, line_dash="dash", line_color="blue", 
-                 annotation_text=f"P90: ${p90:.1f}M")
+    # Add key percentile lines only (P10, P50, P90)
+    key_percentiles = [10, 50, 90]
+    key_values = [np.percentile(wealth_millions, p) for p in key_percentiles]
+    colors = ['red', 'green', 'blue']
+    
+    for perc, val, color in zip(key_percentiles, key_values, colors):
+        fig.add_vline(
+            x=val, 
+            line_dash="dash", 
+            line_color=color,
+            line_width=2,
+            annotation=dict(
+                text=f"P{perc}: ${val:.1f}M",
+                textangle=-90,
+                xanchor="left",
+                yanchor="bottom"
+            )
+        )
+    
+    # Add only depletion line (most important threshold)
+    if np.any(wealth_millions <= 0):
+        failure_rate = np.mean(wealth_millions <= 0) * 100
+        fig.add_vline(
+            x=0,
+            line_dash="solid",
+            line_color="darkred",
+            line_width=3,
+            annotation=dict(
+                text=f"Depletion: {failure_rate:.1f}%",
+                textangle=0,
+                xanchor="left",
+                yanchor="middle",
+                bgcolor="white",
+                bordercolor="darkred"
+            )
+        )
+    
+    # Add compact summary statistics as subtitle
+    success_rate = np.mean(wealth_millions > 0)
+    median_val = key_values[1]  # P50 is index 1 in key_values (P10, P50, P90)
+    stats_text = (
+        f"Mean: ${mean_val:.1f}M • "
+        f"Median: ${median_val:.1f}M • "
+        f"Success: {success_rate:.1%} • "
+        f"{len(wealth_millions):,} Simulations"
+    )
     
     # Format axes
     currency_label = "Real" if currency_format == "real" else "Nominal"
     fig.update_layout(
-        title=f"{title} ({currency_label} Dollars)",
+        title=dict(
+            text=f"{title} ({currency_label} Dollars)<br><sub>{stats_text}</sub>",
+            x=0.5,
+            xanchor='center'
+        ),
         xaxis_title=f"Terminal Wealth (${currency_label} Millions)",
         yaxis_title="Number of Simulations",
-        showlegend=False,
+        yaxis2=dict(
+            title="Density",
+            overlaying="y",
+            side="right",
+            showgrid=False
+        ),
         template="plotly_white",
-        hovermode="x unified"
+        hovermode="x unified",
+        showlegend=True,
+        legend=dict(
+            x=0.02, y=0.98,
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="lightgray",
+            borderwidth=1
+        ),
+        height=500,
+        margin=dict(t=100, b=50, l=50, r=50)
     )
     
     return fig
@@ -407,5 +506,463 @@ def create_tax_analysis_chart(gross_withdrawals: np.ndarray,
     fig.update_xaxes(title_text="Year", row=2, col=1)
     fig.update_yaxes(title_text="Amount ($000s)", row=1, col=1)
     fig.update_yaxes(title_text="Tax Rate (%)", row=2, col=1)
+    
+    return fig
+
+
+def create_monte_carlo_paths_sample(years: np.ndarray,
+                                   wealth_paths: np.ndarray,
+                                   num_samples: int = 50,
+                                   title: str = "Monte Carlo Path Samples") -> go.Figure:
+    """
+    Create chart showing sample individual Monte Carlo simulation paths.
+    
+    Args:
+        years: Array of years
+        wealth_paths: 2D array of wealth paths (simulations x years)
+        num_samples: Number of sample paths to display
+        title: Chart title
+        
+    Returns:
+        Plotly figure
+    """
+    # Select random sample of paths
+    n_sims = wealth_paths.shape[0]
+    sample_indices = np.random.choice(n_sims, min(num_samples, n_sims), replace=False)
+    
+    fig = go.Figure()
+    
+    # Add sample paths with reduced opacity
+    for i, idx in enumerate(sample_indices):
+        path_millions = wealth_paths[idx] / 1_000_000
+        
+        # Color paths by outcome (red for failure, blue for success)
+        color = 'red' if path_millions[-1] <= 0 else 'blue'
+        opacity = 0.3
+        
+        fig.add_trace(go.Scatter(
+            x=years,
+            y=path_millions,
+            mode='lines',
+            line=dict(color=color, width=1),
+            opacity=opacity,
+            showlegend=False,
+            hovertemplate=f"<b>Path {idx}</b><br>" +
+                         "<b>Year:</b> %{x}<br>" +
+                         "<b>Wealth:</b> $%{y:.1f}M<br>" +
+                         "<extra></extra>"
+        ))
+    
+    # Add percentile bands for context
+    percentiles = {
+        'p10': np.percentile(wealth_paths, 10, axis=0) / 1_000_000,
+        'p50': np.percentile(wealth_paths, 50, axis=0) / 1_000_000,
+        'p90': np.percentile(wealth_paths, 90, axis=0) / 1_000_000
+    }
+    
+    # Add P10-P90 band
+    fig.add_trace(go.Scatter(
+        x=years, y=percentiles['p90'],
+        mode='lines', line=dict(color='rgba(0,0,0,0)'),
+        showlegend=False, hoverinfo='skip'
+    ))
+    fig.add_trace(go.Scatter(
+        x=years, y=percentiles['p10'],
+        fill='tonexty', mode='lines',
+        line=dict(color='lightgray', width=1),
+        fillcolor='rgba(128,128,128,0.2)',
+        name='P10-P90 Range',
+        hovertemplate="<b>P10-P90 Range</b><br><extra></extra>"
+    ))
+    
+    # Add median line
+    fig.add_trace(go.Scatter(
+        x=years, y=percentiles['p50'],
+        mode='lines', line=dict(color='black', width=2),
+        name='Median Path',
+        hovertemplate="<b>Median</b><br>" +
+                     "<b>Year:</b> %{x}<br>" +
+                     "<b>Wealth:</b> $%{y:.1f}M<br>" +
+                     "<extra></extra>"
+    ))
+    
+    fig.update_layout(
+        title=f"{title} ({num_samples} Sample Paths)",
+        xaxis_title="Year",
+        yaxis_title="Portfolio Value ($ Millions)",
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(x=0.02, y=0.98)
+    )
+    
+    return fig
+
+
+def create_success_probability_over_time(years: np.ndarray,
+                                       wealth_paths: np.ndarray,
+                                       success_thresholds: List[float] = [0, 1_000_000, 2_500_000],
+                                       title: str = "Success Probability Over Time") -> go.Figure:
+    """
+    Create chart showing probability of success (wealth above thresholds) over time.
+    
+    Args:
+        years: Array of years
+        wealth_paths: 2D array of wealth paths (simulations x years) 
+        success_thresholds: List of wealth thresholds to track
+        title: Chart title
+        
+    Returns:
+        Plotly figure
+    """
+    fig = go.Figure()
+    
+    colors = ['red', 'orange', 'green', 'blue', 'purple']
+    threshold_labels = []
+    
+    for i, threshold in enumerate(success_thresholds):
+        # Calculate success probability at each time point
+        success_probs = []
+        for year_idx in range(len(years)):
+            prob = np.mean(wealth_paths[:, year_idx] > threshold) * 100
+            success_probs.append(prob)
+        
+        # Create label
+        if threshold == 0:
+            label = "Non-Depletion"
+        else:
+            label = f"Above ${threshold/1_000_000:.1f}M"
+        threshold_labels.append(label)
+        
+        fig.add_trace(go.Scatter(
+            x=years,
+            y=success_probs,
+            mode='lines+markers',
+            name=label,
+            line=dict(color=colors[i % len(colors)], width=2),
+            marker=dict(size=4),
+            hovertemplate=f"<b>{label}</b><br>" +
+                         "<b>Year:</b> %{x}<br>" +
+                         "<b>Success Prob:</b> %{y:.1f}%<br>" +
+                         "<extra></extra>"
+        ))
+    
+    # Add reference lines
+    fig.add_hline(y=90, line_dash="dash", line_color="green", 
+                 annotation_text="90% Success Target")
+    fig.add_hline(y=95, line_dash="dash", line_color="darkgreen",
+                 annotation_text="95% Success Target")
+    
+    fig.update_layout(
+        title=title,
+        xaxis_title="Year",
+        yaxis_title="Success Probability (%)",
+        yaxis=dict(range=[0, 100]),
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(x=0.02, y=0.02)
+    )
+    
+    return fig
+
+
+def create_cash_flow_waterfall(year_by_year_details: Dict,
+                              selected_year: int = None,
+                              title: str = "Annual Cash Flow Breakdown") -> go.Figure:
+    """
+    Create waterfall chart showing cash flow sources and uses.
+    
+    Args:
+        year_by_year_details: Dictionary with year-by-year simulation details
+        selected_year: Specific year to analyze (if None, uses first year)
+        title: Chart title
+        
+    Returns:
+        Plotly figure
+    """
+    years = year_by_year_details.get('years', [])
+    if not years:
+        return go.Figure()
+    
+    # Select year to analyze
+    if selected_year is None:
+        year_idx = 0
+    else:
+        try:
+            year_idx = years.index(selected_year)
+        except ValueError:
+            year_idx = 0
+    
+    selected_year = years[year_idx]
+    
+    # Extract cash flow components
+    components = []
+    values = []
+    
+    # Starting wealth
+    start_wealth = year_by_year_details.get('start_wealth', [0] * len(years))[year_idx]
+    components.append('Starting Wealth')
+    values.append(start_wealth)
+    
+    # Income sources (positive)
+    other_income = year_by_year_details.get('other_income', [0] * len(years))[year_idx]
+    if other_income > 0:
+        components.append('Other Income')
+        values.append(other_income)
+    
+    re_income = year_by_year_details.get('re_income', [0] * len(years))[year_idx]
+    if re_income > 0:
+        components.append('Real Estate Income')  
+        values.append(re_income)
+    
+    inheritance = year_by_year_details.get('inheritance', [0] * len(years))[year_idx]
+    if inheritance > 0:
+        components.append('Inheritance')
+        values.append(inheritance)
+    
+    # Investment growth
+    investment_growth = year_by_year_details.get('investment_growth', [0] * len(years))[year_idx]
+    components.append('Investment Growth')
+    values.append(investment_growth)
+    
+    # Expenses (negative)
+    base_spending = -year_by_year_details.get('base_spending', [0] * len(years))[year_idx]
+    components.append('Base Spending')
+    values.append(base_spending)
+    
+    college_topup = -year_by_year_details.get('college_topup', [0] * len(years))[year_idx]
+    if college_topup < 0:
+        components.append('College Expenses')
+        values.append(college_topup)
+    
+    onetime = -year_by_year_details.get('onetime_expense', [0] * len(years))[year_idx] 
+    if onetime < 0:
+        components.append('One-time Expenses')
+        values.append(onetime)
+    
+    taxes = -year_by_year_details.get('taxes_paid', [0] * len(years))[year_idx]
+    if taxes < 0:
+        components.append('Taxes')
+        values.append(taxes)
+    
+    # Ending wealth
+    end_wealth = year_by_year_details.get('end_wealth', [0] * len(years))[year_idx]
+    components.append('Ending Wealth')
+    values.append(end_wealth)
+    
+    # Convert to thousands for readability
+    values_k = [v / 1000 for v in values]
+    
+    # Create waterfall chart
+    fig = go.Figure(go.Waterfall(
+        name=f"Year {selected_year}",
+        orientation="v",
+        measure=["absolute"] + ["relative"] * (len(values) - 2) + ["total"],
+        x=components,
+        textposition="outside",
+        text=[f"${v:,.0f}K" for v in values_k],
+        y=values_k,
+        connector={"line": {"color": "rgb(63, 63, 63)"}},
+        increasing={"marker": {"color": "green"}},
+        decreasing={"marker": {"color": "red"}},
+        totals={"marker": {"color": "blue"}}
+    ))
+    
+    fig.update_layout(
+        title=f"{title} - Year {selected_year}",
+        yaxis_title="Cash Flow ($000s)",
+        template="plotly_white",
+        showlegend=False
+    )
+    
+    return fig
+
+
+def create_sequence_of_returns_analysis(wealth_paths: np.ndarray,
+                                      years: np.ndarray,
+                                      title: str = "Sequence of Returns Risk Analysis") -> go.Figure:
+    """
+    Create chart comparing early vs late recession scenarios.
+    
+    Args:
+        wealth_paths: 2D array of wealth paths
+        years: Array of years
+        title: Chart title
+        
+    Returns:
+        Plotly figure
+    """
+    # Split simulations into early decline vs late decline
+    n_sims, n_years = wealth_paths.shape
+    mid_point = n_years // 2
+    
+    # Identify early decliners (big losses in first half)
+    early_decline_mask = []
+    late_decline_mask = []
+    stable_mask = []
+    
+    for i in range(n_sims):
+        path = wealth_paths[i]
+        early_decline = (path[0] - path[mid_point]) / path[0] if path[0] > 0 else 0
+        late_decline = (path[mid_point] - path[-1]) / path[mid_point] if path[mid_point] > 0 else 0
+        
+        if early_decline > 0.3:  # Lost >30% in first half
+            early_decline_mask.append(i)
+        elif late_decline > 0.3:  # Lost >30% in second half
+            late_decline_mask.append(i)
+        else:
+            stable_mask.append(i)
+    
+    fig = go.Figure()
+    
+    # Plot percentiles for each group
+    groups = [
+        ("Early Market Decline", early_decline_mask, "red"),
+        ("Late Market Decline", late_decline_mask, "orange"), 
+        ("Stable Returns", stable_mask, "green")
+    ]
+    
+    for group_name, indices, color in groups:
+        if not indices:
+            continue
+            
+        group_paths = wealth_paths[indices] / 1_000_000
+        p50 = np.percentile(group_paths, 50, axis=0)
+        
+        fig.add_trace(go.Scatter(
+            x=years,
+            y=p50,
+            mode='lines',
+            name=f"{group_name} (Median)",
+            line=dict(color=color, width=3),
+            hovertemplate=f"<b>{group_name}</b><br>" +
+                         "<b>Year:</b> %{x}<br>" +
+                         "<b>Wealth:</b> $%{y:.1f}M<br>" +
+                         f"<b>Scenarios:</b> {len(indices)}<br>" +
+                         "<extra></extra>"
+        ))
+    
+    # Add annotations explaining the analysis
+    fig.add_annotation(
+        text="Early market declines are typically more harmful<br>to retirement success than late declines",
+        xref="paper", yref="paper",
+        x=0.02, y=0.15,
+        showarrow=False,
+        align="left",
+        bgcolor="rgba(255,255,255,0.8)",
+        bordercolor="black",
+        borderwidth=1
+    )
+    
+    fig.update_layout(
+        title=title,
+        xaxis_title="Year",
+        yaxis_title="Portfolio Value ($ Millions)", 
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(x=0.7, y=0.98)
+    )
+    
+    return fig
+
+
+def create_drawdown_analysis(wealth_paths: np.ndarray,
+                           years: np.ndarray,
+                           title: str = "Portfolio Drawdown Analysis") -> go.Figure:
+    """
+    Create chart showing maximum drawdown analysis over time.
+    
+    Args:
+        wealth_paths: 2D array of wealth paths
+        years: Array of years
+        title: Chart title
+        
+    Returns:
+        Plotly figure
+    """
+    # Calculate drawdowns for each path
+    drawdowns = np.zeros_like(wealth_paths)
+    
+    for i in range(wealth_paths.shape[0]):
+        path = wealth_paths[i]
+        running_max = np.maximum.accumulate(path)
+        drawdowns[i] = (path - running_max) / running_max * 100
+    
+    # Calculate percentiles of drawdowns
+    p10_dd = np.percentile(drawdowns, 10, axis=0)  # Worst 10%
+    p50_dd = np.percentile(drawdowns, 50, axis=0)  # Median
+    p90_dd = np.percentile(drawdowns, 90, axis=0)  # Best 10%
+    
+    fig = go.Figure()
+    
+    # Add drawdown bands
+    fig.add_trace(go.Scatter(
+        x=years, y=p10_dd,
+        mode='lines', line=dict(color='rgba(0,0,0,0)'),
+        showlegend=False, hoverinfo='skip'
+    ))
+    
+    fig.add_trace(go.Scatter(
+        x=years, y=p90_dd,
+        fill='tonexty', mode='lines',
+        line=dict(color='lightcoral'),
+        fillcolor='rgba(255,182,193,0.3)',
+        name='P10-P90 Drawdown Range',
+        hovertemplate="<b>Drawdown Range</b><br>" +
+                     "<b>Year:</b> %{x}<br>" +
+                     "<b>Drawdown:</b> %{y:.1f}%<br>" +
+                     "<extra></extra>"
+    ))
+    
+    # Add median drawdown
+    fig.add_trace(go.Scatter(
+        x=years, y=p50_dd,
+        mode='lines', line=dict(color='darkred', width=3),
+        name='Median Drawdown',
+        hovertemplate="<b>Median Drawdown</b><br>" +
+                     "<b>Year:</b> %{x}<br>" +
+                     "<b>Drawdown:</b> %{y:.1f}%<br>" +
+                     "<extra></extra>"
+    ))
+    
+    # Add reference lines for significant drawdown levels
+    fig.add_hline(y=-20, line_dash="dash", line_color="orange",
+                 annotation_text="20% Drawdown")
+    fig.add_hline(y=-30, line_dash="dash", line_color="red", 
+                 annotation_text="30% Drawdown") 
+    fig.add_hline(y=-50, line_dash="dash", line_color="darkred",
+                 annotation_text="50% Drawdown")
+    
+    # Calculate and display key statistics
+    max_drawdowns = np.min(drawdowns, axis=1)  # Most negative for each path
+    avg_max_dd = np.mean(max_drawdowns)
+    worst_max_dd = np.min(max_drawdowns)
+    
+    stats_text = (
+        f"<b>Maximum Drawdown Stats</b><br>"
+        f"Average Max DD: {avg_max_dd:.1f}%<br>"
+        f"Worst Max DD: {worst_max_dd:.1f}%<br>"
+        f"DD > 30%: {np.mean(max_drawdowns < -30):.1%} of paths<br>"
+        f"DD > 50%: {np.mean(max_drawdowns < -50):.1%} of paths"
+    )
+    
+    fig.add_annotation(
+        text=stats_text,
+        xref="paper", yref="paper", 
+        x=0.02, y=0.15,
+        showarrow=False,
+        align="left",
+        bgcolor="rgba(255,255,255,0.8)",
+        bordercolor="black",
+        borderwidth=1
+    )
+    
+    fig.update_layout(
+        title=title,
+        xaxis_title="Year",
+        yaxis_title="Drawdown from Peak (%)",
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(x=0.7, y=0.02)
+    )
     
     return fig

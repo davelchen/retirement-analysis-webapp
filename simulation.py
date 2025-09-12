@@ -46,13 +46,25 @@ class SimulationParams:
     floor_end_year: int = 2041
     
     # College expenses
+    college_enabled: bool = True
+    college_base_amount: float = 100_000
+    college_start_year: int = 2032
+    college_end_year: int = 2041
     college_growth_real: float = 0.013
     
     # Expense streams (replaces hardcoded onetime_2033/onetime_2040)
     expense_streams: List[Dict[str, Any]] = None
     
-    # Real estate cash flow preset
-    re_flow_preset: str = "ramp"  # "ramp" or "delayed"
+    # Real estate cash flow configuration
+    re_flow_enabled: bool = True
+    re_flow_preset: str = "ramp"  # "ramp", "delayed", or "custom"
+    
+    # Custom real estate parameters (used when preset = "custom")
+    re_flow_start_year: int = 2026  # When RE income begins
+    re_flow_year1_amount: float = 50_000  # First year amount
+    re_flow_year2_amount: float = 60_000  # Second year amount  
+    re_flow_steady_amount: float = 75_000  # Ongoing amount after ramp-up
+    re_flow_delay_years: int = 0  # Years to delay before starting
     
     # Inheritance
     inherit_amount: float = 1_500_000
@@ -68,8 +80,17 @@ class SimulationParams:
     standard_deduction: float = 29_200
     tax_brackets: List[Tuple[float, float]] = None
     
-    # Regime
-    regime: str = "baseline"  # "baseline", "recession_recover", "grind_lower"
+    # Market regime - enhanced controls
+    regime: str = "baseline"  
+    # Regime options: "baseline", "recession_recover", "grind_lower", "late_recession", 
+    # "inflation_shock", "long_bear", "tech_bubble", "custom"
+    
+    # Custom regime parameters (used when regime = "custom")
+    custom_equity_shock_year: int = 0  # Year of equity shock (0-based)
+    custom_equity_shock_return: float = -0.20  # Return in shock year
+    custom_shock_duration: int = 1  # Number of years for shock
+    custom_recovery_years: int = 2  # Years of below-normal returns after shock
+    custom_recovery_equity_return: float = 0.02  # Equity return during recovery
 
     def __post_init__(self):
         if self.tax_brackets is None:
@@ -113,6 +134,9 @@ class RetirementSimulator:
     
     def _get_re_income(self, year: int) -> float:
         """Get real estate income for given year (real dollars)"""
+        if not self.params.re_flow_enabled:
+            return 0
+            
         year_offset = year - self.params.start_year
         
         if self.params.re_flow_preset == "ramp":
@@ -135,14 +159,32 @@ class RetirementSimulator:
                 return 75_000
             else:
                 return 0
+        elif self.params.re_flow_preset == "custom":
+            # Use custom parameters
+            effective_start_year = self.params.re_flow_start_year + self.params.re_flow_delay_years
+            years_since_start = year - effective_start_year
+            
+            if years_since_start < 0:
+                return 0
+            elif years_since_start == 0:
+                return self.params.re_flow_year1_amount
+            elif years_since_start == 1:
+                return self.params.re_flow_year2_amount
+            elif years_since_start >= 2:
+                return self.params.re_flow_steady_amount
+            else:
+                return 0
         else:
             return 0
     
     def _get_college_topup(self, year: int) -> float:
         """Get college top-up for given year (real dollars)"""
-        if 2032 <= year <= 2041:
-            years_since_2032 = year - 2032
-            return 100_000 * (1 + self.params.college_growth_real) ** years_since_2032
+        if not self.params.college_enabled:
+            return 0
+        
+        if self.params.college_start_year <= year <= self.params.college_end_year:
+            years_since_start = year - self.params.college_start_year
+            return self.params.college_base_amount * (1 + self.params.college_growth_real) ** years_since_start
         return 0
     
     def _get_onetime_expense(self, year: int) -> float:
@@ -199,20 +241,77 @@ class RetirementSimulator:
     
     def _get_return_means(self, year_offset: int) -> Tuple[float, float, float, float]:
         """Get return means based on regime"""
+        base_returns = (self.params.equity_mean, self.params.bonds_mean, 
+                       self.params.real_estate_mean, self.params.cash_mean)
+        
         if self.params.regime == "recession_recover":
+            # Early recession: -15% (Yr0), 0% (Yr1), then baseline
             if year_offset == 0:
                 return -0.15, self.params.bonds_mean, self.params.real_estate_mean, self.params.cash_mean
             elif year_offset == 1:
                 return 0.00, self.params.bonds_mean, self.params.real_estate_mean, self.params.cash_mean
             else:
-                return self.params.equity_mean, self.params.bonds_mean, self.params.real_estate_mean, self.params.cash_mean
+                return base_returns
+                
         elif self.params.regime == "grind_lower":
+            # Low returns first 10 years: 0.5% equity, 1% bonds, 0.5% RE
             if year_offset < 10:
                 return 0.005, 0.01, 0.005, self.params.cash_mean
             else:
-                return self.params.equity_mean, self.params.bonds_mean, self.params.real_estate_mean, self.params.cash_mean
+                return base_returns
+                
+        elif self.params.regime == "late_recession":
+            # Recession in years 10-12
+            if 10 <= year_offset <= 12:
+                if year_offset == 10:
+                    return -0.20, self.params.bonds_mean, -0.05, self.params.cash_mean
+                elif year_offset == 11:
+                    return -0.05, self.params.bonds_mean, 0.00, self.params.cash_mean
+                else:  # year 12
+                    return 0.15, self.params.bonds_mean, 0.05, self.params.cash_mean  # Recovery bounce
+            else:
+                return base_returns
+                
+        elif self.params.regime == "inflation_shock":
+            # High inflation years 3-7: Poor equity/bonds, good RE
+            if 3 <= year_offset <= 7:
+                return 0.01, -0.02, 0.08, 0.01  # Bonds hurt by inflation, RE benefits
+            else:
+                return base_returns
+                
+        elif self.params.regime == "long_bear":
+            # Extended bear market years 5-15
+            if 5 <= year_offset <= 15:
+                return 0.02, 0.025, 0.015, self.params.cash_mean
+            else:
+                return base_returns
+                
+        elif self.params.regime == "tech_bubble":
+            # Tech bubble: High early returns, then crash
+            if year_offset <= 3:
+                return self.params.equity_mean * 1.5, self.params.bonds_mean, self.params.real_estate_mean, self.params.cash_mean
+            elif 4 <= year_offset <= 6:
+                return -0.10, self.params.bonds_mean, self.params.real_estate_mean, self.params.cash_mean  # Crash
+            else:
+                return base_returns
+                
+        elif self.params.regime == "custom":
+            # User-defined shock pattern
+            shock_start = self.params.custom_equity_shock_year
+            shock_end = shock_start + self.params.custom_shock_duration - 1
+            recovery_end = shock_end + self.params.custom_recovery_years
+            
+            if shock_start <= year_offset <= shock_end:
+                return (self.params.custom_equity_shock_return, self.params.bonds_mean, 
+                       self.params.real_estate_mean, self.params.cash_mean)
+            elif shock_end < year_offset <= recovery_end:
+                return (self.params.custom_recovery_equity_return, self.params.bonds_mean,
+                       self.params.real_estate_mean, self.params.cash_mean)
+            else:
+                return base_returns
+                
         else:  # baseline
-            return self.params.equity_mean, self.params.bonds_mean, self.params.real_estate_mean, self.params.cash_mean
+            return base_returns
     
     def run_simulation(self) -> SimulationResults:
         """Run Monte Carlo simulation"""

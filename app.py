@@ -17,7 +17,9 @@ from tax import calculate_tax, effective_tax_rate, marginal_tax_rate
 from charts import (
     create_terminal_wealth_distribution, create_wealth_percentile_bands,
     create_comparison_chart, create_spending_chart, create_withdrawal_rate_chart,
-    create_tax_analysis_chart
+    create_tax_analysis_chart, create_monte_carlo_paths_sample, 
+    create_success_probability_over_time, create_cash_flow_waterfall,
+    create_sequence_of_returns_analysis, create_drawdown_analysis
 )
 from io_utils import (
     create_parameters_download_json, parse_parameters_upload_json,
@@ -81,13 +83,23 @@ def initialize_session_state():
                     'floor_end_year': params.floor_end_year,
                     
                     # College expenses
+                    'college_enabled': params.college_enabled,
+                    'college_base_amount': params.college_base_amount,
+                    'college_start_year': params.college_start_year,
+                    'college_end_year': params.college_end_year,
                     'college_growth_real': params.college_growth_real,
                     
                     # Multi-year expenses
                     'onetime_expenses': params.expense_streams or [],
                     
                     # Real estate cash flow
+                    're_flow_enabled': params.re_flow_enabled,
                     're_flow_preset': params.re_flow_preset,
+                    're_flow_start_year': params.re_flow_start_year,
+                    're_flow_year1_amount': params.re_flow_year1_amount,
+                    're_flow_year2_amount': params.re_flow_year2_amount,
+                    're_flow_steady_amount': params.re_flow_steady_amount,
+                    're_flow_delay_years': params.re_flow_delay_years,
                     
                     # Inheritance
                     'inherit_amount': params.inherit_amount,
@@ -119,6 +131,11 @@ def initialize_session_state():
                     
                     # Regime
                     'regime': params.regime,
+                    'custom_equity_shock_year': params.custom_equity_shock_year,
+                    'custom_equity_shock_return': params.custom_equity_shock_return,
+                    'custom_shock_duration': params.custom_shock_duration,
+                    'custom_recovery_years': params.custom_recovery_years,
+                    'custom_recovery_equity_return': params.custom_recovery_equity_return,
                     
                     # Results caching
                     'simulation_results': None,
@@ -171,6 +188,10 @@ def initialize_session_state():
         'floor_end_year': 2046,  # First 20 years of retirement
         
         # College expenses (2 children)
+        'college_enabled': True,
+        'college_base_amount': 100_000,
+        'college_start_year': 2032,
+        'college_end_year': 2041,
         'college_growth_real': 0.015,  # Slightly above inflation
         
         # One-time expenses (realistic family expenses)
@@ -181,7 +202,13 @@ def initialize_session_state():
         ],
         
         # Real estate cash flow (no rental income initially)
+        're_flow_enabled': True,
         're_flow_preset': 'delayed',
+        're_flow_start_year': 2026,
+        're_flow_year1_amount': 50_000,
+        're_flow_year2_amount': 60_000,
+        're_flow_steady_amount': 75_000,
+        're_flow_delay_years': 0,
         
         # Inheritance (modest parental inheritance)
         'inherit_amount': 400_000,
@@ -209,6 +236,11 @@ def initialize_session_state():
         
         # Regime (baseline for demo)
         'regime': 'baseline',
+        'custom_equity_shock_year': 0,
+        'custom_equity_shock_return': -0.20,
+        'custom_shock_duration': 1,
+        'custom_recovery_years': 2,
+        'custom_recovery_equity_return': 0.02,
         
         # Results caching
         'simulation_results': None,
@@ -264,9 +296,19 @@ def get_current_params() -> SimulationParams:
         spending_floor_real=st.session_state.spending_floor_real,
         spending_ceiling_real=st.session_state.spending_ceiling_real,
         floor_end_year=st.session_state.floor_end_year,
+        college_enabled=st.session_state.college_enabled,
+        college_base_amount=st.session_state.college_base_amount,
+        college_start_year=st.session_state.college_start_year,
+        college_end_year=st.session_state.college_end_year,
         college_growth_real=st.session_state.college_growth_real,
         expense_streams=st.session_state.onetime_expenses,
+        re_flow_enabled=st.session_state.re_flow_enabled,
         re_flow_preset=st.session_state.re_flow_preset,
+        re_flow_start_year=st.session_state.re_flow_start_year,
+        re_flow_year1_amount=st.session_state.re_flow_year1_amount,
+        re_flow_year2_amount=st.session_state.re_flow_year2_amount,
+        re_flow_steady_amount=st.session_state.re_flow_steady_amount,
+        re_flow_delay_years=st.session_state.re_flow_delay_years,
         inherit_amount=st.session_state.inherit_amount,
         inherit_year=st.session_state.inherit_year,
         other_income_amount=sum([stream['amount'] for stream in st.session_state.other_income_streams]),
@@ -275,7 +317,12 @@ def get_current_params() -> SimulationParams:
         filing_status=st.session_state.filing_status,
         standard_deduction=st.session_state.standard_deduction,
         tax_brackets=tax_brackets,
-        regime=st.session_state.regime
+        regime=st.session_state.regime,
+        custom_equity_shock_year=st.session_state.custom_equity_shock_year,
+        custom_equity_shock_return=st.session_state.custom_equity_shock_return,
+        custom_shock_duration=st.session_state.custom_shock_duration,
+        custom_recovery_years=st.session_state.custom_recovery_years,
+        custom_recovery_equity_return=st.session_state.custom_recovery_equity_return
     )
 
 
@@ -444,14 +491,62 @@ def create_sidebar():
             help="📅 **When floor protection ends**\n\nAfter this year, spending can go below the floor if necessary. Allows flexibility in later years."
         )
     
-    # College Top-Up
-    st.sidebar.header("College Top-Up")
-    st.session_state.college_growth_real = st.sidebar.number_input(
-        "College Growth Rate", 
-        value=st.session_state.college_growth_real, 
-        format="%.3f",
-        help="🎓 **Annual growth in college costs**\n\nReal growth rate for college expenses (2032-2041). Base amount $100K in 2032, growing annually. Typical: 1-3% above inflation."
+    # College Expenses
+    st.sidebar.header("College Expenses")
+    st.session_state.college_enabled = st.sidebar.checkbox(
+        "Enable College Expenses",
+        value=st.session_state.college_enabled,
+        help="🎓 **Toggle college expense system**\n\nEnable or disable all college-related expenses. When disabled, no college costs are included in the simulation."
     )
+    
+    if st.session_state.college_enabled:
+        with st.sidebar.expander("College Configuration", expanded=True):
+            st.session_state.college_base_amount = st.number_input(
+                "Base Annual Amount ($)", 
+                value=st.session_state.college_base_amount,
+                min_value=0,
+                help="💰 **Annual college cost in first year**\n\nBase amount for college expenses in the starting year. This grows each year by the growth rate. Typical range: $50K-$150K per year."
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.session_state.college_start_year = st.number_input(
+                    "Start Year", 
+                    value=st.session_state.college_start_year,
+                    min_value=st.session_state.start_year,
+                    max_value=st.session_state.start_year + st.session_state.horizon_years,
+                    help="📅 **When college expenses begin**\n\nFirst year college costs are incurred. Typically when your first child starts college."
+                )
+            
+            with col2:
+                st.session_state.college_end_year = st.number_input(
+                    "End Year", 
+                    value=st.session_state.college_end_year,
+                    min_value=st.session_state.college_start_year,
+                    max_value=st.session_state.start_year + st.session_state.horizon_years,
+                    help="📅 **When college expenses end**\n\nLast year of college costs. Typically when your last child graduates college."
+                )
+            
+            st.session_state.college_growth_real = st.number_input(
+                "Annual Growth Rate", 
+                value=st.session_state.college_growth_real, 
+                format="%.3f",
+                help="📈 **Real growth in college costs**\n\nAnnual growth rate above inflation. College costs historically grow 1-3% above inflation due to education cost increases."
+            )
+            
+            # Show calculated summary
+            if st.session_state.college_enabled:
+                duration = st.session_state.college_end_year - st.session_state.college_start_year + 1
+                total_base = st.session_state.college_base_amount * duration
+                final_year_amount = st.session_state.college_base_amount * (1 + st.session_state.college_growth_real) ** (duration - 1)
+                
+                st.info(f"📊 **College Summary**\n\n"
+                       f"Duration: {duration} years ({st.session_state.college_start_year}-{st.session_state.college_end_year})\n\n"
+                       f"First year: ${st.session_state.college_base_amount:,.0f}\n\n"
+                       f"Final year: ${final_year_amount:,.0f}\n\n"
+                       f"Total (without growth): ${total_base:,.0f}")
+    else:
+        st.sidebar.info("🚫 College expenses disabled")
     
     # Multi-Year Expenses
     st.sidebar.header("Multi-Year Expenses")
@@ -495,12 +590,77 @@ def create_sidebar():
     
     # Real Estate Cash Flow
     st.sidebar.header("Real Estate Cash Flow")
-    st.session_state.re_flow_preset = st.sidebar.selectbox(
-        "Cash Flow Pattern", 
-        options=['ramp', 'delayed'], 
-        index=['ramp', 'delayed'].index(st.session_state.re_flow_preset),
-        help="🏘️ **Real estate income pattern**\n\n**Ramp**: $50K (2026) → $60K (2027) → $75K (2028+)\n**Delayed**: $0 (2026-2030) → $50K (2031) → $60K (2032) → $75K (2033+)\n\nReal dollars, net of expenses and taxes."
+    st.session_state.re_flow_enabled = st.sidebar.checkbox(
+        "Enable Real Estate Income",
+        value=st.session_state.re_flow_enabled,
+        help="🏘️ **Toggle real estate income stream**\n\nEnable or disable all real estate income. When disabled, no RE cash flow is included in the simulation."
     )
+    
+    if st.session_state.re_flow_enabled:
+        st.session_state.re_flow_preset = st.sidebar.selectbox(
+            "Cash Flow Pattern", 
+            options=['ramp', 'delayed', 'custom'], 
+            index=['ramp', 'delayed', 'custom'].index(st.session_state.re_flow_preset),
+            help="🏘️ **Real estate income pattern**\n\n**Ramp**: $50K (Yr1) → $60K (Yr2) → $75K (Yr3+)\n**Delayed**: 5-year delay, then ramp up\n**Custom**: Configure your own amounts and timing"
+        )
+        
+        if st.session_state.re_flow_preset == 'custom':
+            with st.sidebar.expander("Custom RE Configuration", expanded=True):
+                st.session_state.re_flow_start_year = st.number_input(
+                    "Start Year", 
+                    value=st.session_state.re_flow_start_year,
+                    min_value=st.session_state.start_year,
+                    max_value=st.session_state.start_year + st.session_state.horizon_years,
+                    help="📅 **When real estate income begins**\n\nFirst year you expect to receive real estate cash flow."
+                )
+                
+                st.session_state.re_flow_delay_years = st.number_input(
+                    "Additional Delay (Years)", 
+                    value=st.session_state.re_flow_delay_years,
+                    min_value=0,
+                    max_value=20,
+                    help="⏳ **Extra years to delay beyond start year**\n\nAdditional delay before income begins. Total start = Start Year + Delay Years."
+                )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.session_state.re_flow_year1_amount = st.number_input(
+                        "Year 1 Amount ($)", 
+                        value=st.session_state.re_flow_year1_amount,
+                        min_value=0,
+                        help="💰 **First year income amount**\n\nReal estate cash flow in the first year of operation."
+                    )
+                    
+                    st.session_state.re_flow_year2_amount = st.number_input(
+                        "Year 2 Amount ($)", 
+                        value=st.session_state.re_flow_year2_amount,
+                        min_value=0,
+                        help="💰 **Second year income amount**\n\nReal estate cash flow in the second year. Often higher than year 1 due to rent increases or stabilization."
+                    )
+                
+                with col2:
+                    st.session_state.re_flow_steady_amount = st.number_input(
+                        "Ongoing Amount ($)", 
+                        value=st.session_state.re_flow_steady_amount,
+                        min_value=0,
+                        help="💰 **Steady-state annual income**\n\nOngoing real estate cash flow from year 3 onwards. The stabilized annual amount."
+                    )
+                
+                # Show calculated summary
+                effective_start = st.session_state.re_flow_start_year + st.session_state.re_flow_delay_years
+                st.info(f"🏠 **RE Income Summary**\n\n"
+                       f"Effective start: {effective_start}\n\n"
+                       f"Year {effective_start}: ${st.session_state.re_flow_year1_amount:,.0f}\n\n"
+                       f"Year {effective_start+1}: ${st.session_state.re_flow_year2_amount:,.0f}\n\n"
+                       f"Year {effective_start+2}+: ${st.session_state.re_flow_steady_amount:,.0f}")
+        else:
+            # Show preset pattern info
+            if st.session_state.re_flow_preset == 'ramp':
+                st.sidebar.info("📈 **Ramp Pattern**\n\n$50K (Yr1) → $60K (Yr2) → $75K (Yr3+)")
+            elif st.session_state.re_flow_preset == 'delayed':
+                st.sidebar.info("⏳ **Delayed Pattern**\n\n$0 (Yrs 1-5) → $50K (Yr6) → $60K (Yr7) → $75K (Yr8+)")
+    else:
+        st.sidebar.info("🚫 Real estate income disabled")
     
     # Inheritance
     st.sidebar.header("Inheritance")
@@ -595,14 +755,100 @@ def create_sidebar():
             help="📊 **Tax rate for third bracket**\n\nHighest rate modeled. Typically 24-32%."
         )
     
-    # Regime
+    # Market Regime
     st.sidebar.header("Market Regime")
+    
+    regime_options = ['baseline', 'recession_recover', 'grind_lower', 'late_recession', 
+                     'inflation_shock', 'long_bear', 'tech_bubble', 'custom']
+    
     st.session_state.regime = st.sidebar.selectbox(
         "Market Scenario", 
-        options=['baseline', 'recession_recover', 'grind_lower'],
-        index=['baseline', 'recession_recover', 'grind_lower'].index(st.session_state.regime),
-        help="📈 **Market scenario to model**\n\n**Baseline**: Use expected returns throughout\n**Recession/Recover**: -15% equity (Yr 1), 0% (Yr 2), then baseline\n**Grind Lower**: Reduced returns first 10 years, then baseline\n\nTests different economic environments."
+        options=regime_options,
+        index=regime_options.index(st.session_state.regime) if st.session_state.regime in regime_options else 0,
+        help="📈 **Market scenario to model**\n\n"
+             "**Baseline**: Expected returns throughout\n"
+             "**Recession/Recover**: Early recession (-15% Yr1, 0% Yr2)\n"
+             "**Grind Lower**: Poor returns first 10 years\n"
+             "**Late Recession**: Recession in years 10-12\n"
+             "**Inflation Shock**: High inflation years 3-7\n"
+             "**Long Bear**: Extended bear market years 5-15\n"
+             "**Tech Bubble**: Boom then bust pattern\n"
+             "**Custom**: Configure your own shock timing"
     )
+    
+    # Show regime descriptions
+    regime_descriptions = {
+        'baseline': "📊 Normal expected returns throughout retirement",
+        'recession_recover': "📉 Early recession: -15% (Yr1) → 0% (Yr2) → normal",
+        'grind_lower': "⬇️ Poor returns (0.5% equity) for first 10 years",
+        'late_recession': "📉 Recession in mid-retirement (years 10-12)",
+        'inflation_shock': "🔥 High inflation period (years 3-7): bonds hurt, RE benefits",
+        'long_bear': "🐻 Extended bear market for 10 years (years 5-15)",
+        'tech_bubble': "💻 Tech bubble: high early returns → crash (years 4-6)",
+        'custom': "⚙️ User-defined shock pattern"
+    }
+    
+    if st.session_state.regime in regime_descriptions:
+        st.sidebar.info(regime_descriptions[st.session_state.regime])
+    
+    # Custom regime controls
+    if st.session_state.regime == 'custom':
+        with st.sidebar.expander("Custom Regime Configuration", expanded=True):
+            st.session_state.custom_equity_shock_year = st.number_input(
+                "Shock Start Year (0-based)", 
+                value=st.session_state.custom_equity_shock_year,
+                min_value=0,
+                max_value=st.session_state.horizon_years - 1,
+                help="📅 **When the market shock begins**\n\n0 = First year of retirement, 1 = Second year, etc."
+            )
+            
+            st.session_state.custom_equity_shock_return = st.number_input(
+                "Equity Return During Shock", 
+                value=st.session_state.custom_equity_shock_return,
+                min_value=-0.50,
+                max_value=0.20,
+                format="%.2f",
+                help="📈 **Equity return during shock period**\n\nDecimal format (-0.20 = -20%). Typical range: -50% to +20%."
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.session_state.custom_shock_duration = st.number_input(
+                    "Shock Duration (Years)", 
+                    value=st.session_state.custom_shock_duration,
+                    min_value=1,
+                    max_value=10,
+                    help="⏱️ **How many years the shock lasts**\n\nTypically 1-3 years for recessions, longer for structural changes."
+                )
+            
+            with col2:
+                st.session_state.custom_recovery_years = st.number_input(
+                    "Recovery Period (Years)", 
+                    value=st.session_state.custom_recovery_years,
+                    min_value=0,
+                    max_value=10,
+                    help="🔄 **Years of below-normal returns after shock**\n\nRecovery period with reduced returns before returning to normal."
+                )
+            
+            st.session_state.custom_recovery_equity_return = st.number_input(
+                "Equity Return During Recovery", 
+                value=st.session_state.custom_recovery_equity_return,
+                min_value=-0.10,
+                max_value=0.15,
+                format="%.2f",
+                help="📈 **Equity return during recovery period**\n\nTypically positive but below normal expected returns."
+            )
+            
+            # Show custom pattern summary
+            shock_end = st.session_state.custom_equity_shock_year + st.session_state.custom_shock_duration - 1
+            recovery_end = shock_end + st.session_state.custom_recovery_years
+            
+            st.info(f"🎯 **Custom Pattern Summary**\n\n"
+                   f"Shock: Years {st.session_state.custom_equity_shock_year}-{shock_end} "
+                   f"({st.session_state.custom_equity_shock_return:.1%})\n\n"
+                   f"Recovery: Years {shock_end+1}-{recovery_end} "
+                   f"({st.session_state.custom_recovery_equity_return:.1%})\n\n"
+                   f"Normal: Year {recovery_end+1}+ (baseline returns)")
     
     # Currency View
     st.sidebar.header("Currency View")
@@ -691,13 +937,23 @@ def save_load_section():
                         st.session_state.floor_end_year = params.floor_end_year
                         
                         # College expenses
+                        st.session_state.college_enabled = params.college_enabled
+                        st.session_state.college_base_amount = params.college_base_amount
+                        st.session_state.college_start_year = params.college_start_year
+                        st.session_state.college_end_year = params.college_end_year
                         st.session_state.college_growth_real = params.college_growth_real
                         
                         # Multi-year expenses - use expense streams directly
                         st.session_state.onetime_expenses = params.expense_streams or []
                         
                         # Real estate
+                        st.session_state.re_flow_enabled = params.re_flow_enabled
                         st.session_state.re_flow_preset = params.re_flow_preset
+                        st.session_state.re_flow_start_year = params.re_flow_start_year
+                        st.session_state.re_flow_year1_amount = params.re_flow_year1_amount
+                        st.session_state.re_flow_year2_amount = params.re_flow_year2_amount
+                        st.session_state.re_flow_steady_amount = params.re_flow_steady_amount
+                        st.session_state.re_flow_delay_years = params.re_flow_delay_years
                         
                         # Inheritance
                         st.session_state.inherit_amount = params.inherit_amount
@@ -731,6 +987,11 @@ def save_load_section():
                         
                         # Market regime
                         st.session_state.regime = params.regime
+                        st.session_state.custom_equity_shock_year = params.custom_equity_shock_year
+                        st.session_state.custom_equity_shock_return = params.custom_equity_shock_return
+                        st.session_state.custom_shock_duration = params.custom_shock_duration
+                        st.session_state.custom_recovery_years = params.custom_recovery_years
+                        st.session_state.custom_recovery_equity_return = params.custom_recovery_equity_return
                         
                         # Clear old simulation results since parameters changed
                         st.session_state.simulation_results = None

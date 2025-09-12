@@ -32,6 +32,9 @@ class DeterministicProjector:
     
     def _get_re_income(self, year: int) -> float:
         """Get real estate income for given year (real dollars)"""
+        if not self.params.re_flow_enabled:
+            return 0
+            
         year_offset = year - self.params.start_year
         
         if self.params.re_flow_preset == "ramp":
@@ -54,14 +57,32 @@ class DeterministicProjector:
                 return 75_000
             else:
                 return 0
+        elif self.params.re_flow_preset == "custom":
+            # Use custom parameters
+            effective_start_year = self.params.re_flow_start_year + self.params.re_flow_delay_years
+            years_since_start = year - effective_start_year
+            
+            if years_since_start < 0:
+                return 0
+            elif years_since_start == 0:
+                return self.params.re_flow_year1_amount
+            elif years_since_start == 1:
+                return self.params.re_flow_year2_amount
+            elif years_since_start >= 2:
+                return self.params.re_flow_steady_amount
+            else:
+                return 0
         else:
             return 0
     
     def _get_college_topup(self, year: int) -> float:
         """Get college top-up for given year (real dollars)"""
-        if 2032 <= year <= 2041:
-            years_since_2032 = year - 2032
-            return 100_000 * (1 + self.params.college_growth_real) ** years_since_2032
+        if not self.params.college_enabled:
+            return 0
+        
+        if self.params.college_start_year <= year <= self.params.college_end_year:
+            years_since_start = year - self.params.college_start_year
+            return self.params.college_base_amount * (1 + self.params.college_growth_real) ** years_since_start
         return 0
     
     def _get_onetime_expense(self, year: int) -> float:
@@ -118,32 +139,10 @@ class DeterministicProjector:
     
     def _get_expected_return(self, year_offset: int) -> float:
         """Get expected portfolio return based on regime"""
-        if self.params.regime == "recession_recover":
-            if year_offset == 0:
-                eq_mean = -0.15
-            elif year_offset == 1:
-                eq_mean = 0.00
-            else:
-                eq_mean = self.params.equity_mean
-            bond_mean = self.params.bonds_mean
-            re_mean = self.params.real_estate_mean
-            cash_mean = self.params.cash_mean
-        elif self.params.regime == "grind_lower":
-            if year_offset < 10:
-                eq_mean = 0.005
-                bond_mean = 0.01
-                re_mean = 0.005
-                cash_mean = self.params.cash_mean
-            else:
-                eq_mean = self.params.equity_mean
-                bond_mean = self.params.bonds_mean
-                re_mean = self.params.real_estate_mean
-                cash_mean = self.params.cash_mean
-        else:  # baseline
-            eq_mean = self.params.equity_mean
-            bond_mean = self.params.bonds_mean
-            re_mean = self.params.real_estate_mean
-            cash_mean = self.params.cash_mean
+        # Get returns from enhanced regime logic (import here to avoid circular imports)
+        from simulation import RetirementSimulator
+        temp_sim = RetirementSimulator(self.params)
+        eq_mean, bond_mean, re_mean, cash_mean = temp_sim._get_return_means(year_offset)
         
         # Calculate weighted return
         weights = np.array([self.params.w_equity, self.params.w_bonds, 

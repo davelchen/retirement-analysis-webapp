@@ -322,3 +322,185 @@ class TestUtilityFunctions:
         assert stats['prob_below_5m'] == 0.0  # None below 5M
         assert stats['prob_below_10m'] == 0.4  # 2 out of 5
         assert stats['prob_below_15m'] == 0.6  # 3 out of 5
+    
+    def test_return_means_late_recession(self):
+        """Test return means for late_recession regime"""
+        params = SimulationParams(regime="late_recession")
+        simulator = RetirementSimulator(params)
+        
+        # Years 0-9: baseline
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(5)
+        assert eq_mean == params.equity_mean
+        
+        # Year 10: recession start
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(10)
+        assert eq_mean == -0.20
+        assert re_mean == -0.05
+        
+        # Year 11: continued recession
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(11)
+        assert eq_mean == -0.05
+        
+        # Year 12: recovery bounce
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(12)
+        assert eq_mean == 0.15
+        
+        # Year 13+: back to baseline
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(13)
+        assert eq_mean == params.equity_mean
+    
+    def test_return_means_inflation_shock(self):
+        """Test return means for inflation_shock regime"""
+        params = SimulationParams(regime="inflation_shock")
+        simulator = RetirementSimulator(params)
+        
+        # Years 0-2: baseline
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(2)
+        assert eq_mean == params.equity_mean
+        
+        # Years 3-7: inflation period
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(5)
+        assert eq_mean == 0.01  # Poor equity returns
+        assert bond_mean == -0.02  # Bonds hurt by inflation
+        assert re_mean == 0.08  # RE benefits from inflation
+        assert cash_mean == 0.01
+        
+        # Year 8+: back to baseline
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(8)
+        assert eq_mean == params.equity_mean
+    
+    def test_return_means_long_bear(self):
+        """Test return means for long_bear regime"""
+        params = SimulationParams(regime="long_bear")
+        simulator = RetirementSimulator(params)
+        
+        # Years 0-4: baseline
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(3)
+        assert eq_mean == params.equity_mean
+        
+        # Years 5-15: bear market
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(10)
+        assert eq_mean == 0.02
+        assert bond_mean == 0.025
+        assert re_mean == 0.015
+        
+        # Year 16+: back to baseline
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(16)
+        assert eq_mean == params.equity_mean
+    
+    def test_return_means_tech_bubble(self):
+        """Test return means for tech_bubble regime"""
+        params = SimulationParams(regime="tech_bubble")
+        simulator = RetirementSimulator(params)
+        
+        # Years 0-3: bubble
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(2)
+        assert eq_mean == params.equity_mean * 1.5
+        
+        # Years 4-6: crash
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(5)
+        assert eq_mean == -0.10
+        
+        # Year 7+: back to baseline
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(7)
+        assert eq_mean == params.equity_mean
+    
+    def test_return_means_custom_regime(self):
+        """Test return means for custom regime"""
+        params = SimulationParams(
+            regime="custom",
+            custom_equity_shock_year=3,
+            custom_equity_shock_return=-0.25,
+            custom_shock_duration=2,
+            custom_recovery_years=3,
+            custom_recovery_equity_return=0.015
+        )
+        simulator = RetirementSimulator(params)
+        
+        # Years 0-2: baseline
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(2)
+        assert eq_mean == params.equity_mean
+        
+        # Years 3-4: shock period
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(3)
+        assert eq_mean == -0.25
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(4)
+        assert eq_mean == -0.25
+        
+        # Years 5-7: recovery period
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(6)
+        assert eq_mean == 0.015
+        
+        # Year 8+: back to baseline
+        eq_mean, bond_mean, re_mean, cash_mean = simulator._get_return_means(8)
+        assert eq_mean == params.equity_mean
+    
+    def test_college_disabled(self):
+        """Test college expenses can be disabled"""
+        params = SimulationParams(college_enabled=False)
+        simulator = RetirementSimulator(params)
+        
+        # Should return 0 for all college years
+        assert simulator._get_college_topup(2032) == 0
+        assert simulator._get_college_topup(2035) == 0
+        assert simulator._get_college_topup(2041) == 0
+    
+    def test_college_custom_parameters(self):
+        """Test custom college parameters"""
+        params = SimulationParams(
+            college_enabled=True,
+            college_base_amount=75_000,
+            college_start_year=2030,
+            college_end_year=2033,
+            college_growth_real=0.02
+        )
+        simulator = RetirementSimulator(params)
+        
+        # Before start
+        assert simulator._get_college_topup(2029) == 0
+        
+        # During college period
+        assert abs(simulator._get_college_topup(2030) - 75_000) < 1
+        assert abs(simulator._get_college_topup(2031) - 76_500) < 1  # 75k * 1.02
+        assert abs(simulator._get_college_topup(2032) - 78_030) < 1  # 75k * 1.02^2
+        assert abs(simulator._get_college_topup(2033) - 79_591) < 1  # 75k * 1.02^3
+        
+        # After end
+        assert simulator._get_college_topup(2034) == 0
+    
+    def test_re_flow_disabled(self):
+        """Test real estate cash flow can be disabled"""
+        params = SimulationParams(re_flow_enabled=False, start_year=2026)
+        simulator = RetirementSimulator(params)
+        
+        # Should return 0 for all years
+        assert simulator._get_re_income(2026) == 0
+        assert simulator._get_re_income(2030) == 0
+        assert simulator._get_re_income(2035) == 0
+    
+    def test_re_flow_custom_parameters(self):
+        """Test custom real estate parameters"""
+        params = SimulationParams(
+            re_flow_enabled=True,
+            re_flow_preset="custom",
+            re_flow_start_year=2028,
+            re_flow_year1_amount=25_000,
+            re_flow_year2_amount=35_000,
+            re_flow_steady_amount=50_000,
+            re_flow_delay_years=2,
+            start_year=2026
+        )
+        simulator = RetirementSimulator(params)
+        
+        # Before effective start (2028 + 2 = 2030)
+        assert simulator._get_re_income(2029) == 0
+        
+        # Year 1 of RE income
+        assert simulator._get_re_income(2030) == 25_000
+        
+        # Year 2 of RE income
+        assert simulator._get_re_income(2031) == 35_000
+        
+        # Steady state
+        assert simulator._get_re_income(2032) == 50_000
+        assert simulator._get_re_income(2035) == 50_000
