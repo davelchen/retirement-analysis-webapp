@@ -53,8 +53,9 @@ Dynamic spending adjustments based on withdrawal rate bands:
 Every parameter includes detailed explanations with usage guidance and examples.
 
 ### Dynamic Management
-- **One-time expenses**: Add/remove with year, amount, and description
+- **Multi-year expense streams**: Annual amount, start year, and duration (like income streams)
 - **Income streams**: Multiple sources with start year, duration, and amounts
+- **Overlapping support**: Multiple expense periods with accurate yearly totals
 - **Aggregation logic**: UI data structures converted to simulation parameters
 
 ### Visualization Suite
@@ -144,3 +145,22 @@ Extend `io_utils.py` for Excel, PDF, or other output formats.
 - Educational use disclaimer included
 
 This project demonstrates comprehensive financial modeling with professional software engineering practices including modular design, extensive testing, and user-friendly interfaces.
+
+## Recent Major Updates
+
+### Multi-Year Expense Streams (Latest)
+- **Replaced**: Hardcoded `onetime_2033`/`onetime_2040` parameters
+- **With**: Dynamic `expense_streams` architecture supporting any year/duration
+- **Benefits**: True multi-year planning, overlapping expense support, college-ready
+- **UI**: "Multi-Year Expenses" section matching "Other Income" structure
+- **Testing**: All 90 tests passing, including new multi-year scenarios
+
+### College Expense Modeling  
+- **Built-in system**: `college_growth_real` handles 2032-2041 with inflation
+- **Personal config**: Uses existing college system, no duplicate modeling
+- **Flexible**: Expense streams available for other multi-year costs
+
+### Parameter Loading Enhancement
+- **Added**: Load Parameters confirmation button (no auto-loading)
+- **Fixed**: Complete parameter mapping for all SimulationParams fields
+- **UI**: Shows file info before user confirms loading
