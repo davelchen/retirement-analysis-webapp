@@ -90,14 +90,39 @@ class TestRetirementSimulator:
         assert abs(topup_2033 - expected_2033) < 1
     
     def test_onetime_expenses(self):
-        """Test one-time expenses"""
-        params = SimulationParams(onetime_2033=50_000, onetime_2040=75_000)
+        """Test expense streams"""
+        params = SimulationParams(
+            expense_streams=[
+                {'amount': 50_000, 'start_year': 2033, 'years': 1, 'description': '2033 expense'},
+                {'amount': 75_000, 'start_year': 2040, 'years': 1, 'description': '2040 expense'}
+            ]
+        )
         simulator = RetirementSimulator(params)
         
         assert simulator._get_onetime_expense(2032) == 0
         assert simulator._get_onetime_expense(2033) == 50_000
         assert simulator._get_onetime_expense(2040) == 75_000
         assert simulator._get_onetime_expense(2041) == 0
+    
+    def test_multiyear_expense_streams(self):
+        """Test multi-year expense streams (e.g., college expenses)"""
+        params = SimulationParams(
+            expense_streams=[
+                {'amount': 50_000, 'start_year': 2032, 'years': 4, 'description': 'Kid 1 college'},
+                {'amount': 50_000, 'start_year': 2034, 'years': 4, 'description': 'Kid 2 college'}
+            ]
+        )
+        simulator = RetirementSimulator(params)
+        
+        # Test individual years
+        assert simulator._get_onetime_expense(2031) == 0
+        assert simulator._get_onetime_expense(2032) == 50_000  # Kid 1 only
+        assert simulator._get_onetime_expense(2033) == 50_000  # Kid 1 only
+        assert simulator._get_onetime_expense(2034) == 100_000  # Both kids
+        assert simulator._get_onetime_expense(2035) == 100_000  # Both kids
+        assert simulator._get_onetime_expense(2036) == 50_000  # Kid 2 only
+        assert simulator._get_onetime_expense(2037) == 50_000  # Kid 2 only
+        assert simulator._get_onetime_expense(2038) == 0       # Neither
     
     def test_other_income(self):
         """Test other income calculation"""

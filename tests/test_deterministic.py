@@ -72,8 +72,10 @@ class TestDeterministicProjector:
             start_year=2026,
             horizon_years=20,
             start_capital=5_000_000,
-            onetime_2033=50_000,
-            onetime_2040=75_000,
+            expense_streams=[
+                {'amount': 50_000, 'start_year': 2033, 'years': 1, 'description': '2033 expense'},
+                {'amount': 75_000, 'start_year': 2040, 'years': 1, 'description': '2040 expense'}
+            ],
             re_flow_preset="ramp"
         )
         projector = DeterministicProjector(params)

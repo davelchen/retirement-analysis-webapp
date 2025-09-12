@@ -65,12 +65,14 @@ class DeterministicProjector:
         return 0
     
     def _get_onetime_expense(self, year: int) -> float:
-        """Get one-time expenses for given year (real dollars)"""
-        if year == 2033:
-            return self.params.onetime_2033
-        elif year == 2040:
-            return self.params.onetime_2040
-        return 0
+        """Get expense stream total for given year (real dollars)"""
+        total = 0
+        for stream in self.params.expense_streams:
+            start_year = stream.get('start_year', stream.get('year', 0))
+            years = stream.get('years', 1)
+            if start_year <= year < start_year + years:
+                total += stream.get('amount', 0)
+        return total
     
     def _get_other_income(self, year: int) -> float:
         """Get other income for given year (real dollars, net of tax)"""

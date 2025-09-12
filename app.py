@@ -157,14 +157,7 @@ def get_current_params() -> SimulationParams:
         spending_ceiling_real=st.session_state.spending_ceiling_real,
         floor_end_year=st.session_state.floor_end_year,
         college_growth_real=st.session_state.college_growth_real,
-        onetime_2033=sum([
-            exp['amount'] for exp in st.session_state.onetime_expenses 
-            if exp.get('start_year', exp.get('year', 0)) <= 2033 < exp.get('start_year', exp.get('year', 0)) + exp.get('years', 1)
-        ]),
-        onetime_2040=sum([
-            exp['amount'] for exp in st.session_state.onetime_expenses 
-            if exp.get('start_year', exp.get('year', 0)) <= 2040 < exp.get('start_year', exp.get('year', 0)) + exp.get('years', 1)
-        ]),
+        expense_streams=st.session_state.onetime_expenses,
         re_flow_preset=st.session_state.re_flow_preset,
         inherit_amount=st.session_state.inherit_amount,
         inherit_year=st.session_state.inherit_year,
@@ -592,23 +585,8 @@ def save_load_section():
                         # College expenses
                         st.session_state.college_growth_real = params.college_growth_real
                         
-                        # Multi-year expenses - convert from aggregated back to UI list format
-                        onetime_expenses = []
-                        if params.onetime_2033 > 0:
-                            onetime_expenses.append({
-                                'amount': params.onetime_2033,
-                                'start_year': 2033, 
-                                'years': 1,
-                                'description': 'Loaded from file (2033)'
-                            })
-                        if params.onetime_2040 > 0:
-                            onetime_expenses.append({
-                                'amount': params.onetime_2040,
-                                'start_year': 2040, 
-                                'years': 1,
-                                'description': 'Loaded from file (2040)'
-                            })
-                        st.session_state.onetime_expenses = onetime_expenses
+                        # Multi-year expenses - use expense streams directly
+                        st.session_state.onetime_expenses = params.expense_streams or []
                         
                         # Real estate
                         st.session_state.re_flow_preset = params.re_flow_preset

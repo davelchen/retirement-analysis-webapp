@@ -79,14 +79,16 @@ class TestParameterConversion:
         assert total_years_empty == 0
     
     def test_simulation_params_with_aggregated_values(self):
-        """Test that SimulationParams works with aggregated values from UI"""
-        # Test with aggregated one-time expenses
+        """Test that SimulationParams works with expense streams from UI"""
+        # Test with expense streams (new format)
         params = SimulationParams(
             start_capital=5_000_000,
             horizon_years=10,
             num_sims=100,
-            onetime_2033=75_000,  # Aggregated from multiple expenses
-            onetime_2040=200_000, # Aggregated from multiple expenses
+            expense_streams=[
+                {'amount': 75_000, 'start_year': 2033, 'years': 1, 'description': 'Aggregated 2033 expense'},
+                {'amount': 200_000, 'start_year': 2040, 'years': 1, 'description': 'Aggregated 2040 expense'}
+            ],
             other_income_amount=50_000,  # Aggregated from multiple streams
             other_income_start_year=2028,
             other_income_years=8
@@ -94,8 +96,9 @@ class TestParameterConversion:
         
         # Should create valid params
         assert params.start_capital == 5_000_000
-        assert params.onetime_2033 == 75_000
-        assert params.onetime_2040 == 200_000
+        assert len(params.expense_streams) == 2
+        assert params.expense_streams[0]['amount'] == 75_000
+        assert params.expense_streams[1]['amount'] == 200_000
         assert params.other_income_amount == 50_000
         assert params.other_income_start_year == 2028
         assert params.other_income_years == 8
@@ -107,6 +110,11 @@ class TestParameterConversion:
         
         assert len(results.terminal_wealth) == 100
         assert 0 <= results.success_rate <= 1
+        
+        # Test that expenses are calculated correctly
+        assert simulator._get_onetime_expense(2033) == 75_000
+        assert simulator._get_onetime_expense(2040) == 200_000
+        assert simulator._get_onetime_expense(2035) == 0
     
     def test_complex_income_stream_calculation(self):
         """Test complex income stream scenarios"""
@@ -255,39 +263,43 @@ class TestParameterCompatibility:
     """Test backward compatibility with existing parameter structure"""
     
     def test_existing_simulation_params_work(self):
-        """Test that existing SimulationParams interface still works"""
+        """Test that SimulationParams interface works with new expense stream format"""
         # Test with all default parameters
         params_default = SimulationParams()
-        assert params_default.onetime_2033 == 100_000
-        assert params_default.onetime_2040 == 100_000
+        assert params_default.expense_streams == []
         assert params_default.other_income_amount == 0
         
-        # Test with custom parameters using old interface
+        # Test with custom parameters using new interface
         params_custom = SimulationParams(
             start_capital=6_000_000,
-            onetime_2033=150_000,
-            onetime_2040=200_000,
+            expense_streams=[
+                {'amount': 150_000, 'start_year': 2033, 'years': 1, 'description': '2033 expense'},
+                {'amount': 200_000, 'start_year': 2040, 'years': 1, 'description': '2040 expense'}
+            ],
             other_income_amount=30_000,
             other_income_start_year=2030,
             other_income_years=8
         )
         
         assert params_custom.start_capital == 6_000_000
-        assert params_custom.onetime_2033 == 150_000
-        assert params_custom.onetime_2040 == 200_000
+        assert len(params_custom.expense_streams) == 2
+        assert params_custom.expense_streams[0]['amount'] == 150_000
+        assert params_custom.expense_streams[1]['amount'] == 200_000
         assert params_custom.other_income_amount == 30_000
         assert params_custom.other_income_start_year == 2030
         assert params_custom.other_income_years == 8
     
     def test_serialization_compatibility(self):
-        """Test that parameter serialization still works with new structure"""
+        """Test that parameter serialization works with expense streams"""
         from io_utils import params_to_dict, dict_to_params
         
         # Test with parameters that would come from new UI
         params = SimulationParams(
             start_capital=7_000_000,
-            onetime_2033=75_000,   # Aggregated from UI
-            onetime_2040=125_000,  # Aggregated from UI
+            expense_streams=[
+                {'amount': 75_000, 'start_year': 2033, 'years': 1, 'description': 'Expense 1'},
+                {'amount': 125_000, 'start_year': 2040, 'years': 1, 'description': 'Expense 2'}
+            ],
             other_income_amount=45_000,  # Aggregated from UI
             other_income_start_year=2029,
             other_income_years=6
@@ -298,8 +310,9 @@ class TestParameterCompatibility:
         restored_params = dict_to_params(param_dict)
         
         assert restored_params.start_capital == params.start_capital
-        assert restored_params.onetime_2033 == params.onetime_2033
-        assert restored_params.onetime_2040 == params.onetime_2040
+        assert len(restored_params.expense_streams) == len(params.expense_streams)
+        assert restored_params.expense_streams[0]['amount'] == params.expense_streams[0]['amount']
+        assert restored_params.expense_streams[1]['amount'] == params.expense_streams[1]['amount']
         assert restored_params.other_income_amount == params.other_income_amount
         assert restored_params.other_income_start_year == params.other_income_start_year
         assert restored_params.other_income_years == params.other_income_years

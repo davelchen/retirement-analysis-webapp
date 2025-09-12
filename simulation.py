@@ -3,7 +3,7 @@ Monte Carlo retirement simulation engine with guardrails and tax-aware withdrawa
 Pure functions for simulation logic, decoupled from UI.
 """
 import numpy as np
-from typing import Dict, List, Tuple, Optional, NamedTuple
+from typing import Dict, List, Tuple, Optional, NamedTuple, Any
 from dataclasses import dataclass
 
 
@@ -48,9 +48,8 @@ class SimulationParams:
     # College expenses
     college_growth_real: float = 0.013
     
-    # One-time expenses
-    onetime_2033: float = 100_000
-    onetime_2040: float = 100_000
+    # Expense streams (replaces hardcoded onetime_2033/onetime_2040)
+    expense_streams: List[Dict[str, Any]] = None
     
     # Real estate cash flow preset
     re_flow_preset: str = "ramp"  # "ramp" or "delayed"
@@ -78,6 +77,9 @@ class SimulationParams:
                 self.tax_brackets = [(0, 0.10), (94_300, 0.22), (201_000, 0.24)]
             else:  # Single
                 self.tax_brackets = [(0, 0.10), (47_150, 0.22), (100_500, 0.24)]
+        
+        if self.expense_streams is None:
+            self.expense_streams = []
 
 
 @dataclass
@@ -144,12 +146,13 @@ class RetirementSimulator:
         return 0
     
     def _get_onetime_expense(self, year: int) -> float:
-        """Get one-time expenses for given year (real dollars)"""
+        """Get expense stream total for given year (real dollars)"""
         total = 0
-        if year == 2033:
-            total += self.params.onetime_2033
-        if year == 2040:
-            total += self.params.onetime_2040
+        for stream in self.params.expense_streams:
+            start_year = stream.get('start_year', stream.get('year', 0))
+            years = stream.get('years', 1)
+            if start_year <= year < start_year + years:
+                total += stream.get('amount', 0)
         return total
     
     def _get_other_income(self, year: int) -> float:
