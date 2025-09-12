@@ -157,8 +157,14 @@ def get_current_params() -> SimulationParams:
         spending_ceiling_real=st.session_state.spending_ceiling_real,
         floor_end_year=st.session_state.floor_end_year,
         college_growth_real=st.session_state.college_growth_real,
-        onetime_2033=sum([exp['amount'] for exp in st.session_state.onetime_expenses if exp['year'] == 2033]),
-        onetime_2040=sum([exp['amount'] for exp in st.session_state.onetime_expenses if exp['year'] == 2040]),
+        onetime_2033=sum([
+            exp['amount'] for exp in st.session_state.onetime_expenses 
+            if exp.get('start_year', exp.get('year', 0)) <= 2033 < exp.get('start_year', exp.get('year', 0)) + exp.get('years', 1)
+        ]),
+        onetime_2040=sum([
+            exp['amount'] for exp in st.session_state.onetime_expenses 
+            if exp.get('start_year', exp.get('year', 0)) <= 2040 < exp.get('start_year', exp.get('year', 0)) + exp.get('years', 1)
+        ]),
         re_flow_preset=st.session_state.re_flow_preset,
         inherit_amount=st.session_state.inherit_amount,
         inherit_year=st.session_state.inherit_year,
@@ -346,37 +352,45 @@ def create_sidebar():
         help="🎓 **Annual growth in college costs**\n\nReal growth rate for college expenses (2032-2041). Base amount $100K in 2032, growing annually. Typical: 1-3% above inflation."
     )
     
-    # One-Time Expenses
-    st.sidebar.header("One-Time Expenses")
+    # Multi-Year Expenses
+    st.sidebar.header("Multi-Year Expenses")
     
-    with st.sidebar.expander("Manage One-Time Expenses", expanded=True):
-        # Display existing expenses
+    with st.sidebar.expander("Manage Expense Streams", expanded=True):
+        # Display existing expense streams
         for i, expense in enumerate(st.session_state.onetime_expenses):
-            col1, col2, col3 = st.columns([2, 2, 1])
+            st.write(f"**Expense Stream {i+1}**")
+            col1, col2 = st.columns(2)
             with col1:
-                new_year = st.number_input(f"Year {i+1}", value=expense['year'], min_value=st.session_state.start_year, max_value=st.session_state.start_year + st.session_state.horizon_years, key=f"expense_year_{i}")
+                new_amount = st.number_input(f"Annual Amount {i+1}", value=expense.get('amount', 50000), min_value=0, key=f"expense_amount_{i}")
+                new_start = st.number_input(f"Start Year {i+1}", value=expense.get('start_year', expense.get('year', st.session_state.start_year + 5)), min_value=st.session_state.start_year, key=f"expense_start_{i}")
             with col2:
-                new_amount = st.number_input(f"Amount {i+1}", value=expense['amount'], min_value=0, key=f"expense_amount_{i}")
-            with col3:
-                if st.button("🗑️", key=f"delete_expense_{i}", help="Delete this expense"):
+                new_years = st.number_input(f"Duration {i+1}", value=expense.get('years', 1), min_value=1, key=f"expense_years_{i}")
+                if st.button("🗑️ Delete", key=f"delete_expense_{i}", help="Delete this expense stream"):
                     st.session_state.onetime_expenses.pop(i)
                     st.rerun()
             
-            # Update the expense
+            # Update the expense stream
             st.session_state.onetime_expenses[i] = {
-                'year': new_year, 
-                'amount': new_amount, 
-                'description': expense.get('description', f'Expense {i+1}')
+                'amount': new_amount,
+                'start_year': new_start,
+                'years': new_years,
+                'description': expense.get('description', f'Expense stream {i+1}')
             }
         
-        # Add new expense button
-        if st.button("➕ Add One-Time Expense"):
+        # Add new expense stream button
+        if st.button("➕ Add Expense Stream"):
             st.session_state.onetime_expenses.append({
-                'year': st.session_state.start_year + 5,
                 'amount': 50_000,
-                'description': f'New expense {len(st.session_state.onetime_expenses) + 1}'
+                'start_year': st.session_state.start_year + 5,
+                'years': 1,
+                'description': f'Expense stream {len(st.session_state.onetime_expenses) + 1}'
             })
             st.rerun()
+        
+        # Show summary if expense streams exist
+        if st.session_state.onetime_expenses:
+            total_current = sum([expense['amount'] for expense in st.session_state.onetime_expenses])
+            st.info(f"💸 Total current annual expenses: ${total_current:,}")
     
     # Real Estate Cash Flow
     st.sidebar.header("Real Estate Cash Flow")
@@ -578,19 +592,21 @@ def save_load_section():
                         # College expenses
                         st.session_state.college_growth_real = params.college_growth_real
                         
-                        # One-time expenses - convert from aggregated back to UI list format
+                        # Multi-year expenses - convert from aggregated back to UI list format
                         onetime_expenses = []
                         if params.onetime_2033 > 0:
                             onetime_expenses.append({
-                                'year': 2033, 
-                                'amount': params.onetime_2033, 
-                                'description': 'Loaded from file'
+                                'amount': params.onetime_2033,
+                                'start_year': 2033, 
+                                'years': 1,
+                                'description': 'Loaded from file (2033)'
                             })
                         if params.onetime_2040 > 0:
                             onetime_expenses.append({
-                                'year': 2040, 
-                                'amount': params.onetime_2040, 
-                                'description': 'Loaded from file'
+                                'amount': params.onetime_2040,
+                                'start_year': 2040, 
+                                'years': 1,
+                                'description': 'Loaded from file (2040)'
                             })
                         st.session_state.onetime_expenses = onetime_expenses
                         

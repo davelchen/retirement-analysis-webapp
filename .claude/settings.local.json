@@ -4,7 +4,8 @@
       "Bash(mkdir:*)",
       "Bash(python3 -m pytest tests/test_tax.py -v)",
       "Bash(python3 -m pytest tests/ -v --tb=short)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(ssh-keygen:*)"
     ],
     "deny": [],
     "ask": []
