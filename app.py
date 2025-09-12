@@ -720,7 +720,7 @@ def display_charts():
         terminal_wealth, 
         currency_format=st.session_state.currency_view.lower()
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Percentile bands
     st.subheader("Wealth Percentile Bands Over Time")
@@ -737,7 +737,7 @@ def display_charts():
         years, percentiles, 
         currency_format=st.session_state.currency_view.lower()
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Withdrawal rate chart (deterministic path)
     if st.session_state.deterministic_results is not None:
@@ -751,7 +751,7 @@ def display_charts():
             det_years, withdrawal_rates,
             st.session_state.lower_wr, st.session_state.upper_wr
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
 
 def display_year_by_year_table():
@@ -794,7 +794,7 @@ def display_year_by_year_table():
             pass  # Keep original values if formatting fails
     
     # Display with proper formatting
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width='stretch')
     
     # Download CSV
     currency_suffix = st.session_state.currency_view.lower()
