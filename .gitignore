@@ -2,6 +2,7 @@
 default.json
 *_personal_*.json
 *_confidential_*.json
+ui_config.json
 
 # Python
 __pycache__/

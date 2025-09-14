@@ -111,7 +111,7 @@ class DeterministicProjector:
 
         # Primary Social Security
         if self.params.social_security_enabled:
-            from app import calculate_social_security_benefit
+            from tax_utils import calculate_social_security_benefit
             total_ss_income += calculate_social_security_benefit(
                 year=year,
                 start_year=self.params.start_year,
@@ -124,7 +124,7 @@ class DeterministicProjector:
 
         # Spousal Social Security
         if self.params.spouse_ss_enabled:
-            from app import calculate_social_security_benefit
+            from tax_utils import calculate_social_security_benefit
             total_ss_income += calculate_social_security_benefit(
                 year=year,
                 start_year=self.params.start_year,
@@ -204,6 +204,7 @@ class DeterministicProjector:
             'one_times': [],
             're_income': [],
             'other_income': [],
+            'social_security_income': [],
             'taxable_income': [],
             'taxes': [],
             'net_need': [],
@@ -292,6 +293,7 @@ class DeterministicProjector:
             details['one_times'].append(one_times)
             details['re_income'].append(re_income)
             details['other_income'].append(other_income)
+            details['social_security_income'].append(ss_income)
             details['taxable_income'].append(max(0, gross_withdrawal - self.params.standard_deduction))
             details['taxes'].append(taxes)
             details['net_need'].append(net_need)
@@ -351,7 +353,7 @@ def create_nominal_table(details: Dict,
     nominal_fields = [
         'start_assets', 'base_spending', 'adjusted_base_spending',
         'college_topup', 'one_times', 're_income', 'other_income',
-        'taxable_income', 'taxes', 'net_need', 'gross_withdrawal',
+        'social_security_income', 'taxable_income', 'taxes', 'net_need', 'gross_withdrawal',
         'growth', 'inheritance', 'end_assets'
     ]
     

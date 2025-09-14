@@ -2,6 +2,7 @@
 Streamlit web application for Monte Carlo retirement simulation.
 Features state tax integration, Social Security modeling, and comprehensive
 retirement planning with tax-aware withdrawals and Guyton-Klinger guardrails.
+
 """
 import streamlit as st
 import numpy as np
@@ -15,13 +16,16 @@ import io
 from simulation import SimulationParams, RetirementSimulator, calculate_percentiles, calculate_summary_stats
 from deterministic import DeterministicProjector, convert_to_nominal, create_nominal_table
 from tax import calculate_tax, effective_tax_rate, marginal_tax_rate
+from io_utils import convert_wizard_to_json, convert_wizard_json_to_simulation_params, create_parameters_download_json
 from charts import (
     create_terminal_wealth_distribution, create_wealth_percentile_bands,
     create_comparison_chart, create_spending_chart, create_withdrawal_rate_chart,
-    create_tax_analysis_chart, create_monte_carlo_paths_sample, 
+    create_tax_analysis_chart, create_monte_carlo_paths_sample,
     create_success_probability_over_time, create_cash_flow_waterfall,
-    create_sequence_of_returns_analysis, create_drawdown_analysis
+    create_sequence_of_returns_analysis, create_drawdown_analysis,
+    create_income_sources_stacked_area, create_asset_allocation_evolution
 )
+from ai_analysis import RetirementAnalyzer, create_mock_analysis, APIError
 from io_utils import (
     create_parameters_download_json, parse_parameters_upload_json,
     export_terminal_wealth_csv, export_percentile_bands_csv, export_year_by_year_csv,
@@ -108,9 +112,35 @@ def calculate_social_security_benefit(year, start_year, annual_benefit, scenario
     return base_benefit
 
 
+def load_ui_config():
+    """Load UI configuration like API keys from ui_config.json"""
+    try:
+        import os
+        if os.path.exists('ui_config.json'):
+            with open('ui_config.json', 'r') as f:
+                config = json.load(f)
+            return config
+    except Exception as e:
+        print(f"Warning: Could not load ui_config.json: {e}")
+
+    return {}
+
+
+def save_ui_config(config):
+    """Save UI configuration to ui_config.json"""
+    try:
+        with open('ui_config.json', 'w') as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save ui_config.json: {e}")
+
+
 def initialize_session_state():
     """Initialize session state variables with defaults for hypothetical CA family ($250K income)"""
-    
+
+    # Load UI config first
+    ui_config = load_ui_config()
+
     # Try to load default.json if it exists
     try:
         import os
@@ -247,6 +277,10 @@ def initialize_session_state():
         'w_bonds': 0.25,
         'w_real_estate': 0.08,
         'w_cash': 0.02,
+
+        # Glide path (age-based allocation adjustment)
+        'glide_path_enabled': False,
+        'equity_reduction_per_year': 0.005,
         
         # Return model (conservative assumptions)
         'equity_mean': 0.048,
@@ -344,10 +378,18 @@ def initialize_session_state():
     
     # Use loaded_defaults if available, otherwise use fallback defaults
     final_defaults = loaded_defaults if 'loaded_defaults' in locals() and loaded_defaults else defaults
-    
+
     for key, value in final_defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+    # Initialize UI config items
+    if 'gemini_api_key' not in st.session_state:
+        st.session_state.gemini_api_key = ui_config.get('gemini_api_key', '')
+    if 'enable_ai_analysis' not in st.session_state:
+        st.session_state.enable_ai_analysis = ui_config.get('enable_ai_analysis', False)
+    if 'gemini_model' not in st.session_state:
+        st.session_state.gemini_model = ui_config.get('gemini_model', 'gemini-2.0-flash')
 
 
 def get_current_params() -> SimulationParams:
@@ -375,6 +417,8 @@ def get_current_params() -> SimulationParams:
         w_bonds=st.session_state.w_bonds,
         w_real_estate=st.session_state.w_real_estate,
         w_cash=st.session_state.w_cash,
+        glide_path_enabled=st.session_state.get('glide_path_enabled', False),
+        equity_reduction_per_year=st.session_state.get('equity_reduction_per_year', 0.005),
         equity_mean=st.session_state.equity_mean,
         equity_vol=st.session_state.equity_vol,
         bonds_mean=st.session_state.bonds_mean,
@@ -432,7 +476,7 @@ def get_current_params() -> SimulationParams:
 def params_hash(params: SimulationParams) -> str:
     """Create hash of parameters for caching"""
     import hashlib
-    params_str = str(params.__dict__)
+    params_str = str(params)
     return hashlib.md5(params_str.encode()).hexdigest()
 
 
@@ -901,7 +945,7 @@ def create_sidebar():
     if st.session_state.social_security_enabled:
         st.session_state.ss_annual_benefit = st.sidebar.number_input(
             "Annual SS Benefit ($)",
-            value=st.session_state.get('ss_annual_benefit', 40000),
+            value=int(st.session_state.get('ss_annual_benefit', 40000)),
             min_value=0,
             max_value=200000,
             step=1000,
@@ -965,7 +1009,7 @@ def create_sidebar():
         if st.session_state.spouse_ss_enabled:
             st.session_state.spouse_ss_annual_benefit = st.sidebar.number_input(
                 "Spouse Annual SS ($)",
-                value=st.session_state.get('spouse_ss_annual_benefit', 30000),
+                value=int(st.session_state.get('spouse_ss_annual_benefit', 30000)),
                 min_value=0,
                 max_value=200000,
                 step=1000,
@@ -1091,143 +1135,19 @@ def create_sidebar():
             help="📊 **Expected annual inflation**\n\nUsed to convert real dollars to nominal. Historical average ~2.5-3%. Current environment may vary."
         )
 
+    # Save Parameters
+    st.sidebar.header("Save Parameters")
+    if st.sidebar.button("📄 Download JSON", help="💾 **Download current parameters**\n\nSave all current simulation settings to a JSON file. Use the wizard to load saved parameters later."):
+        params = get_current_params()
+        json_str = create_parameters_download_json(params)
+        st.sidebar.download_button(
+            label="💾 Download",
+            data=json_str,
+            file_name="retirement_parameters.json",
+            mime="application/json"
+        )
 
-def save_load_section():
-    """Create save/load parameters section"""
-    st.header("Save/Load Parameters")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Save Parameters")
-        if st.button("Download Parameters JSON"):
-            params = get_current_params()
-            json_str = create_parameters_download_json(params)
-            st.download_button(
-                label="Download JSON",
-                data=json_str,
-                file_name="retirement_parameters.json",
-                mime="application/json"
-            )
-    
-    with col2:
-        st.subheader("Load Parameters")
-        uploaded_file = st.file_uploader("Upload Parameters JSON", type=['json'])
-        
-        if uploaded_file is not None:
-            # Show file info and load button
-            st.info(f"📁 Selected: {uploaded_file.name} ({uploaded_file.size} bytes)")
-            
-            if st.button("Load Parameters", type="primary"):
-                try:
-                    json_str = uploaded_file.read().decode('utf-8')
-                    is_valid, error = validate_parameters_json(json_str)
-                    
-                    if is_valid:
-                        params = parse_parameters_upload_json(json_str)
-                    
-                        # Update session state - ALL parameters
-                        st.session_state.start_year = params.start_year
-                        st.session_state.horizon_years = params.horizon_years
-                        st.session_state.num_sims = params.num_sims
-                        st.session_state.random_seed = params.random_seed
-                        
-                        # Capital and allocation
-                        st.session_state.custom_capital = params.start_capital
-                        st.session_state.use_custom_capital = True
-                        st.session_state.w_equity = params.w_equity
-                        st.session_state.w_bonds = params.w_bonds
-                        st.session_state.w_real_estate = params.w_real_estate
-                        st.session_state.w_cash = params.w_cash
-                        
-                        # Return model
-                        st.session_state.equity_mean = params.equity_mean
-                        st.session_state.equity_vol = params.equity_vol
-                        st.session_state.bonds_mean = params.bonds_mean
-                        st.session_state.bonds_vol = params.bonds_vol
-                        st.session_state.real_estate_mean = params.real_estate_mean
-                        st.session_state.real_estate_vol = params.real_estate_vol
-                        st.session_state.cash_mean = params.cash_mean
-                        st.session_state.cash_vol = params.cash_vol
-                        
-                        # CAPE and guardrails
-                        st.session_state.cape_now = params.cape_now
-                        st.session_state.lower_wr = params.lower_wr
-                        st.session_state.upper_wr = params.upper_wr
-                        st.session_state.adjustment_pct = params.adjustment_pct
-                        
-                        # Spending bounds
-                        st.session_state.spending_floor_real = params.spending_floor_real
-                        st.session_state.spending_ceiling_real = params.spending_ceiling_real
-                        st.session_state.floor_end_year = params.floor_end_year
-                        
-                        # College expenses
-                        st.session_state.college_enabled = params.college_enabled
-                        st.session_state.college_base_amount = params.college_base_amount
-                        st.session_state.college_start_year = params.college_start_year
-                        st.session_state.college_end_year = params.college_end_year
-                        st.session_state.college_growth_real = params.college_growth_real
-                        
-                        # Multi-year expenses - use expense streams directly
-                        st.session_state.onetime_expenses = params.expense_streams or []
-                        
-                        # Real estate
-                        st.session_state.re_flow_enabled = params.re_flow_enabled
-                        st.session_state.re_flow_preset = params.re_flow_preset
-                        st.session_state.re_flow_start_year = params.re_flow_start_year
-                        st.session_state.re_flow_year1_amount = params.re_flow_year1_amount
-                        st.session_state.re_flow_year2_amount = params.re_flow_year2_amount
-                        st.session_state.re_flow_steady_amount = params.re_flow_steady_amount
-                        st.session_state.re_flow_delay_years = params.re_flow_delay_years
-                        
-                        # Inheritance
-                        st.session_state.inherit_amount = params.inherit_amount
-                        st.session_state.inherit_year = params.inherit_year
-                        
-                        # Other income - convert from aggregated back to UI list format
-                        other_income_streams = []
-                        if params.other_income_amount > 0 and params.other_income_years > 0:
-                            other_income_streams.append({
-                                'amount': params.other_income_amount,
-                                'start_year': params.other_income_start_year,
-                                'years': params.other_income_years,
-                                'description': 'Loaded from file'
-                            })
-                        st.session_state.other_income_streams = other_income_streams
-                        
-                        # Tax parameters
-                        st.session_state.filing_status = params.filing_status
-                        st.session_state.standard_deduction = params.standard_deduction
-                        if params.tax_brackets:
-                            # Convert back to individual session state values
-                            if len(params.tax_brackets) >= 1:
-                                st.session_state.bracket_1_threshold = params.tax_brackets[0][0]
-                                st.session_state.bracket_1_rate = params.tax_brackets[0][1]
-                            if len(params.tax_brackets) >= 2:
-                                st.session_state.bracket_2_threshold = params.tax_brackets[1][0]
-                                st.session_state.bracket_2_rate = params.tax_brackets[1][1]
-                            if len(params.tax_brackets) >= 3:
-                                st.session_state.bracket_3_threshold = params.tax_brackets[2][0]
-                                st.session_state.bracket_3_rate = params.tax_brackets[2][1]
-                        
-                        # Market regime
-                        st.session_state.regime = params.regime
-                        st.session_state.custom_equity_shock_year = params.custom_equity_shock_year
-                        st.session_state.custom_equity_shock_return = params.custom_equity_shock_return
-                        st.session_state.custom_shock_duration = params.custom_shock_duration
-                        st.session_state.custom_recovery_years = params.custom_recovery_years
-                        st.session_state.custom_recovery_equity_return = params.custom_recovery_equity_return
-                        
-                        # Clear old simulation results since parameters changed
-                        st.session_state.simulation_results = None
-                        st.session_state.deterministic_results = None
-                        
-                        st.success("Parameters loaded successfully!")
-                        st.rerun()
-                    else:
-                        st.error(f"Invalid parameters file: {error}")
-                except Exception as e:
-                    st.error(f"Error loading parameters: {str(e)}")
+
 
 
 def run_simulations():
@@ -1288,6 +1208,297 @@ def display_summary_kpis():
         st.metric("Prob < $15M", f"{terminal_stats['prob_below_15m']:.1%}")
 
 
+def display_ai_analysis_section():
+    """Display the AI analysis configuration and trigger section"""
+    if st.session_state.simulation_results is None:
+        return
+
+    st.subheader("🤖 AI Retirement Analysis")
+
+    # Check if user wants AI analysis
+    col_ai1, col_ai2 = st.columns([3, 1])
+
+    with col_ai1:
+        enable_ai = st.checkbox(
+            "Enable AI-powered analysis and recommendations",
+            value=st.session_state.get('enable_ai_analysis', False),
+            help="Get personalized recommendations based on your simulation results using Google Gemini AI"
+        )
+        # Save enable_ai setting if it changed
+        if enable_ai != st.session_state.get('enable_ai_analysis', False):
+            st.session_state.enable_ai_analysis = enable_ai
+            # Save to config file
+            ui_config = load_ui_config()
+            ui_config['enable_ai_analysis'] = enable_ai
+            if 'gemini_api_key' in st.session_state:
+                ui_config['gemini_api_key'] = st.session_state.gemini_api_key
+            save_ui_config(ui_config)
+
+    if enable_ai:
+        # Only show API key instructions if no key is entered
+        current_api_key = st.session_state.get('gemini_api_key', '')
+        if not current_api_key:
+            # Instructions for getting API key
+            st.info(
+                "🔑 **Get Your Free Gemini API Key:**\n\n"
+                "1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)\n"
+                "2. Click **'Get API key'** → **'Create API key'**\n"
+                "3. Copy your key and paste it below\n\n"
+                "**Free Tier:** Gemini 2.5 Pro (100 requests/day), Flash models (higher limits)"
+            )
+
+            st.warning(
+                "🔒 **PRIVACY WARNING:** Free tier Gemini models may use your retirement data for AI training. "
+                "For maximum privacy, use paid Gemini Pro API or disable AI analysis. "
+                "Never include real account numbers or sensitive personal details."
+            )
+
+        with col_ai2:
+            gemini_api_key = st.text_input(
+                "🔐 Gemini API Key (Optional)",
+                value=st.session_state.get('gemini_api_key', ''),
+                type="password",
+                help="Paste your free API key from https://aistudio.google.com/app/apikey"
+            )
+
+            # Model selection dropdown
+            available_models = RetirementAnalyzer.get_available_models()
+            model_options = list(available_models.keys())
+            model_labels = [f"{key}: {value}" for key, value in available_models.items()]
+
+            selected_model = st.selectbox(
+                "🧠 Gemini Model",
+                options=model_options,
+                index=model_options.index(st.session_state.get('gemini_model', 'gemini-2.5-pro')),
+                format_func=lambda x: available_models[x],
+                help="Choose the Gemini model for analysis. Flash models are faster, Pro models are more capable."
+            )
+
+            # Save selections if they changed
+            settings_changed = False
+            if gemini_api_key != st.session_state.get('gemini_api_key', ''):
+                st.session_state.gemini_api_key = gemini_api_key
+                settings_changed = True
+            if selected_model != st.session_state.get('gemini_model', 'gemini-2.5-pro'):
+                st.session_state.gemini_model = selected_model
+                settings_changed = True
+
+            if settings_changed:
+                # Save to config file
+                ui_config = load_ui_config()
+                ui_config['gemini_api_key'] = gemini_api_key
+                ui_config['gemini_model'] = selected_model
+                ui_config['enable_ai_analysis'] = enable_ai
+                save_ui_config(ui_config)
+
+        st.markdown("---")
+
+        # NEW LOGIC: Check if AI results already exist
+        if st.session_state.get('ai_analysis_result') is not None:
+            # If they exist, display them
+            display_ai_analysis(st.session_state.ai_analysis_result)
+
+            # Offer a button to re-run the analysis
+            if st.button("🔄 Re-run AI Analysis", key="rerun_ai_analysis"):
+                st.session_state.ai_analysis_result = None
+                st.rerun()
+        else:
+            # If results DON'T exist, create the button first
+            analyze_button = st.button(
+                "🧠 Run AI Analysis",
+                type="primary",
+                key="run_ai_analysis_main",
+                help="Analyze your simulation results with AI-powered insights",
+                disabled=(not gemini_api_key and not enable_ai)
+            )
+
+            # Show ready message when not running analysis
+            if not (analyze_button or st.session_state.get('force_ai_analysis', False)):
+                if gemini_api_key:
+                    st.success(f"✅ Ready to analyze with {available_models.get(selected_model, selected_model)}")
+                else:
+                    st.info("💡 Enter your Gemini API key above for AI-powered insights, or use offline analysis below.")
+
+            # Run analysis when button is clicked
+            if analyze_button or st.session_state.get('force_ai_analysis', False):
+
+                # Clear the force flag if it was set
+                if 'force_ai_analysis' in st.session_state:
+                    del st.session_state.force_ai_analysis
+
+                # Check if simulation results exist
+                if st.session_state.simulation_results is None:
+                    st.error("❌ No simulation results found. Please run a simulation first.")
+                    return
+
+                # Get current results and recalculate stats (needed after button rerun)
+                current_results = st.session_state.simulation_results
+                current_terminal_stats = calculate_summary_stats(current_results.terminal_wealth)
+
+                if gemini_api_key:
+                    try:
+                        # Initialize analyzer and perform analysis
+                        with st.spinner(f"🧠 Analyzing your retirement plan using {available_models.get(selected_model, selected_model)}..."):
+                            analyzer = RetirementAnalyzer(gemini_api_key, selected_model)
+
+                            params = get_current_params()
+
+                            # Store analysis data for chat interface
+                            st.session_state.current_analysis_data = analyzer._extract_analysis_data(current_results, params, current_terminal_stats)
+
+                            analysis, error_type = analyzer.analyze_retirement_plan(current_results, params, current_terminal_stats)
+
+                            if analysis is None:
+                                # Show specific error message
+                                error_msg = APIError.get_user_message(error_type) if error_type else "API not available"
+                                st.error(error_msg)
+
+                                # Fall back to mock analysis
+                                st.info("💡 Using offline analysis as fallback")
+                                analysis = create_mock_analysis(current_results.success_rate, error_type)
+
+                            # Store the analysis result
+                            st.session_state.ai_analysis_result = analysis
+
+                    except Exception as e:
+                        st.error(f"❌ AI Analysis failed: {str(e)}")
+                        return
+                else:
+                    # Use mock analysis when no API key provided
+                    st.info("💡 Using offline analysis. Get a **free** Gemini API key above for AI-powered insights!")
+                    analysis = create_mock_analysis(current_results.success_rate)
+                    st.session_state.ai_analysis_result = analysis
+
+                # Results will be displayed automatically since ai_analysis_result is now set
+
+    else:
+        st.info("💡 Enable AI analysis above for **free** personalized retirement recommendations powered by Google Gemini")
+
+
+
+def display_ai_analysis(analysis):
+    """Display AI analysis results in a structured format"""
+
+    # Success Assessment
+    st.write("**📊 Success Assessment:**")
+    st.write(analysis.success_assessment)
+
+    col_analysis1, col_analysis2 = st.columns(2)
+
+    with col_analysis1:
+        st.write("**⚠️ Key Risks:**")
+        for i, risk in enumerate(analysis.key_risks, 1):
+            st.write(f"{i}. {risk}")
+
+    with col_analysis2:
+        st.write("**💡 Recommendations:**")
+        for rec in analysis.recommendations:
+            st.write(f"**{rec['category']}:** {rec['suggestion']}")
+            st.caption(f"*Why: {rec['reasoning']}*")
+            st.write("")
+
+    # Summary and confidence
+    st.write("**📝 Summary:**")
+    st.write(analysis.summary)
+
+    # Confidence indicator
+    confidence_color = {
+        'High': '🟢',
+        'Medium': '🟡',
+        'Low': '🔴'
+    }.get(analysis.confidence_level, '⚪')
+
+    st.caption(f"**Analysis Confidence:** {confidence_color} {analysis.confidence_level}")
+
+    # Add chat interface
+    display_chat_interface()
+
+
+def display_chat_interface():
+    """Display interactive chat interface for follow-up questions"""
+    api_key = st.session_state.get('gemini_api_key', '')
+    if not api_key:
+        return
+
+    st.markdown("---")
+    st.write("**💬 Chat with AI about your retirement analysis**")
+
+    # Initialize chat history in session state
+    if 'chat_messages' not in st.session_state:
+        st.session_state.chat_messages = []
+
+    # Process chat input first (before displaying messages)
+    if prompt := st.chat_input("Ask a question about your retirement analysis..."):
+        if prompt.strip():
+            # Add user message to history and display it immediately
+            st.session_state.chat_messages.append({
+                'role': 'user',
+                'content': prompt
+            })
+
+
+            # Get AI response
+            try:
+                model = st.session_state.get('gemini_model', 'gemini-2.5-pro')
+                analyzer = RetirementAnalyzer(api_key, model)
+
+                # Get analysis data if available
+                analysis_data = getattr(st.session_state, 'current_analysis_data', None)
+
+                # Build conversation context from recent messages
+                context = ""
+                if len(st.session_state.chat_messages) > 1:
+                    recent_messages = st.session_state.chat_messages[-6:]  # Last 3 exchanges
+                    context = "\n".join([
+                        f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
+                        for msg in recent_messages[:-1]  # Exclude the current question
+                    ])
+
+                # Show spinner while getting response
+                with st.spinner("Thinking..."):
+                    response, error_type = analyzer.chat_about_analysis(
+                        prompt,
+                        analysis_data,
+                        context if context else None
+                    )
+
+                if response:
+                    # Add AI response to history
+                    st.session_state.chat_messages.append({
+                        'role': 'assistant',
+                        'content': response
+                    })
+
+                else:
+                    error_msg = APIError.get_user_message(error_type)
+                    # Add error message to history
+                    st.session_state.chat_messages.append({
+                        'role': 'assistant',
+                        'content': f"Chat error: {error_msg}"
+                    })
+
+            except Exception as e:
+                # Add error message to history
+                st.session_state.chat_messages.append({
+                    'role': 'assistant',
+                    'content': f"Error: {str(e)}"
+                })
+
+            # Trigger a rerun to show the new messages
+            st.rerun()
+
+    # Display chat history using modern chat interface (after processing input)
+    for message in st.session_state.chat_messages:
+        with st.chat_message(message['role']):
+            st.write(message['content'])
+
+    # Clear chat button
+    if len(st.session_state.chat_messages) > 0:
+        if st.button("Clear Chat", key="clear_chat"):
+            st.session_state.chat_messages = []
+            st.rerun()
+
+
 def display_charts():
     """Display interactive charts"""
     if st.session_state.simulation_results is None:
@@ -1341,16 +1552,100 @@ def display_charts():
         )
         st.plotly_chart(fig, width='stretch')
 
+        # Income sources stacked area chart
+        st.subheader("Income Sources Over Time")
+        details = det_results.year_by_year_details
+
+        # Convert to nominal if needed
+        if st.session_state.currency_view == "Nominal":
+            details = create_nominal_table(
+                details, st.session_state.start_year, st.session_state.inflation_rate
+            )
+
+        fig = create_income_sources_stacked_area(
+            details,
+            currency_format=st.session_state.currency_view.lower()
+        )
+        st.plotly_chart(fig, width='stretch')
+
+        # Asset allocation evolution chart
+        st.subheader("Asset Allocation Evolution")
+        params = get_current_params()
+
+        fig = create_asset_allocation_evolution(
+            params,
+            details,
+            currency_format=st.session_state.currency_view.lower()
+        )
+        st.plotly_chart(fig, width='stretch')
+
+
+def get_percentile_path_details(results, percentile):
+    """Get path details for a given percentile using actual simulation data"""
+    if percentile == 10:
+        return results.p10_path_details
+    elif percentile == 50:
+        return results.median_path_details
+    elif percentile == 90:
+        return results.p90_path_details
+    else:
+        # Default to median for unsupported percentiles
+        return results.median_path_details
+
 
 def display_year_by_year_table():
-    """Display year-by-year median path table"""
+    """Display year-by-year path table with percentile selection"""
+    print(f"DEBUG [display_year_by_year_table]: Called, simulation_results exists: {st.session_state.simulation_results is not None}")
     if st.session_state.simulation_results is None:
+        print(f"DEBUG [display_year_by_year_table]: No simulation results, returning early")
         return
-    
-    st.header("Year-by-Year Table (Median Path)")
-    
-    # Get median path details
-    details = st.session_state.simulation_results.median_path_details
+
+    # Path selection dropdown
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        path_selection = st.selectbox(
+            "Select Path:",
+            options=["P10 (Pessimistic)", "P50 (Median)", "P90 (Optimistic)"],
+            index=1,  # Default to P50 (Median)
+            help="Choose which simulation path to display:\n• P10: 10th percentile (pessimistic case)\n• P50: 50th percentile (median case)\n• P90: 90th percentile (optimistic case)"
+        )
+        print(f"DEBUG [Year-by-year]: Path selection changed to: {path_selection}")
+
+    with col2:
+        if path_selection == "P10 (Pessimistic)":
+            st.header("Year-by-Year Table (P10 - Pessimistic Path)")
+        elif path_selection == "P90 (Optimistic)":
+            st.header("Year-by-Year Table (P90 - Optimistic Path)")
+        else:
+            st.header("Year-by-Year Table (P50 - Median Path)")
+
+    # Get appropriate path details
+    try:
+        if path_selection == "P10 (Pessimistic)":
+            print(f"DEBUG [Year-by-year]: Getting P10 path details")
+            details = get_percentile_path_details(st.session_state.simulation_results, 10)
+            print(f"DEBUG [Year-by-year]: P10 details retrieved, has {len(details)} keys")
+            # Debug first few values
+            if 'start_assets' in details and len(details['start_assets']) > 3:
+                print(f"DEBUG [P10]: First 3 start_assets: {details['start_assets'][:3]}")
+        elif path_selection == "P90 (Optimistic)":
+            print(f"DEBUG [Year-by-year]: Getting P90 path details")
+            details = get_percentile_path_details(st.session_state.simulation_results, 90)
+            print(f"DEBUG [Year-by-year]: P90 details retrieved, has {len(details)} keys")
+            # Debug first few values
+            if 'start_assets' in details and len(details['start_assets']) > 3:
+                print(f"DEBUG [P90]: First 3 start_assets: {details['start_assets'][:3]}")
+        else:
+            print(f"DEBUG [Year-by-year]: Using median path details")
+            details = st.session_state.simulation_results.median_path_details
+            print(f"DEBUG [Year-by-year]: Median details retrieved, has {len(details)} keys")
+            # Debug first few values
+            if 'start_assets' in details and len(details['start_assets']) > 3:
+                print(f"DEBUG [P50]: First 3 start_assets: {details['start_assets'][:3]}")
+    except Exception as e:
+        print(f"DEBUG [Year-by-year]: Exception getting path details: {str(e)}")
+        st.error(f"❌ Error loading {path_selection} data: {str(e)}")
+        return
     
     # Convert to nominal if needed
     if st.session_state.currency_view == "Nominal":
@@ -1384,16 +1679,29 @@ def display_year_by_year_table():
     # Display with proper formatting
     st.dataframe(df, width='stretch')
     
-    # Download CSV
+    # Download CSV for selected path
     currency_suffix = st.session_state.currency_view.lower()
-    csv_data = export_year_by_year_csv(
-        st.session_state.simulation_results.median_path_details, currency_suffix
-    )
-    
+
+    # Determine path suffix for filename
+    if path_selection == "P10 (Pessimistic)":
+        path_suffix = "p10"
+        path_label = "P10"
+    elif path_selection == "P90 (Optimistic)":
+        path_suffix = "p90"
+        path_label = "P90"
+    else:
+        path_suffix = "p50"
+        path_label = "P50"
+
+    # Use original details for CSV (not formatted display data)
+    csv_details = details if path_selection == "P50 (Median)" else get_percentile_path_details(st.session_state.simulation_results, 10 if "P10" in path_selection else 90 if "P90" in path_selection else 50)
+
+    csv_data = export_year_by_year_csv(csv_details, currency_suffix)
+
     st.download_button(
-        label=f"Download Year-by-Year CSV ({currency_suffix.title()})",
+        label=f"Download {path_label} Year-by-Year CSV ({currency_suffix.title()})",
         data=csv_data,
-        file_name=f"year_by_year_{currency_suffix}.csv",
+        file_name=f"year_by_year_{path_suffix}_{currency_suffix}.csv",
         mime="text/csv"
     )
 
@@ -1453,61 +1761,166 @@ def display_downloads():
         )
 
 
-def main():
-    """Main application"""
-    st.set_page_config(
-        page_title="Retirement Monte Carlo Simulator",
-        page_icon="💰",
-        layout="wide"
-    )
-    
-    st.title("💰 Retirement Monte Carlo Simulator")
-    st.markdown("Advanced retirement simulation with tax-aware withdrawals and guardrails")
-    
-    # Initialize session state
+st.title("📊 Monte Carlo Analysis")
+st.markdown("Advanced retirement simulation with tax-aware withdrawals and guardrails")
+
+def apply_wizard_params_to_monte_carlo():
+    """Transfer wizard parameters to Monte Carlo session state."""
+    try:
+        wizard_params = st.session_state.get('wizard_params', {})
+        if not wizard_params:
+            return False
+
+        print(f"DEBUG [parameter transfer]: Starting wizard params transfer...")
+
+        # Convert wizard params to JSON format, then to simulation parameters
+        wizard_json = convert_wizard_to_json(wizard_params)
+        simulation_params_dict = convert_wizard_json_to_simulation_params(wizard_json)
+
+        print(f"DEBUG [parameter transfer]: Converted wizard params to simulation format")
+
+        # Apply parameters with special handling for the dual-mode capital system
+        for key, value in simulation_params_dict.items():
+            if key == 'start_capital':
+                # Handle the dual-mode capital system properly
+                st.session_state.use_custom_capital = True  # Switch to custom mode
+                st.session_state.custom_capital = value     # Set custom amount
+                st.session_state.capital_preset = "Custom"  # Switch to custom mode in dropdown
+                print(f"DEBUG [parameter transfer]: Set capital mode - use_custom_capital = True, custom_capital = {value}")
+            else:
+                st.session_state[key] = value
+                print(f"DEBUG [parameter transfer]: Set {key} = {value}")
+
+        # Initialize essential UI variables that widgets need (to prevent crashes)
+        essential_ui_vars = {
+            'capital_preset': st.session_state.get('capital_preset', "2,500,000"),
+            'currency_view': st.session_state.get('currency_view', "Real"),
+            'chart_type': st.session_state.get('chart_type', "Terminal Wealth Distribution"),
+            'selected_percentile': st.session_state.get('selected_percentile', "Median (P50)"),
+            'custom_equity_shock_year': st.session_state.get('custom_equity_shock_year', 0),
+            'custom_equity_shock_return': st.session_state.get('custom_equity_shock_return', -0.2),
+            'custom_shock_duration': st.session_state.get('custom_shock_duration', 1),
+            'custom_recovery_years': st.session_state.get('custom_recovery_years', 2),
+            'custom_recovery_equity_return': st.session_state.get('custom_recovery_equity_return', 0.02),
+        }
+
+        for var_name, default_value in essential_ui_vars.items():
+            if var_name not in st.session_state:
+                st.session_state[var_name] = default_value
+                print(f"DEBUG [parameter transfer]: Set UI variable {var_name} = {default_value}")
+
+        # Handle expense streams - ensure empty streams clear the UI
+        expense_streams = simulation_params_dict.get('expense_streams', [])
+        if not expense_streams:
+            # Clear the main expense stream array that UI uses
+            st.session_state.onetime_expenses = []
+            # Clear any existing expense stream session state keys
+            keys_to_clear = [k for k in st.session_state.keys() if k.startswith('expense_amount_') or k.startswith('expense_start_') or k.startswith('expense_years_')]
+            for key in keys_to_clear:
+                del st.session_state[key]
+            print(f"DEBUG [parameter transfer]: Cleared expense streams and {len(keys_to_clear)} expense variables")
+        else:
+            # Set expense streams if they exist
+            st.session_state.onetime_expenses = expense_streams
+
+        # Handle income streams - ensure empty streams clear the UI
+        income_streams = simulation_params_dict.get('income_streams', [])
+        if not income_streams:
+            # Clear the main income stream array that UI uses
+            st.session_state.other_income_streams = []
+            # Clear any existing income stream session state keys
+            keys_to_clear = [k for k in st.session_state.keys() if k.startswith('income_amount_') or k.startswith('income_start_') or k.startswith('income_years_')]
+            for key in keys_to_clear:
+                del st.session_state[key]
+            print(f"DEBUG [parameter transfer]: Cleared income streams and {len(keys_to_clear)} income variables")
+        else:
+            # Set income streams if they exist
+            st.session_state.other_income_streams = income_streams
+
+        print(f"DEBUG [parameter transfer]: Successfully transferred all wizard parameters")
+        return True
+
+    except Exception as e:
+        print(f"ERROR [parameter transfer]: Failed to transfer wizard params: {e}")
+        st.error(f"Error transferring parameters from wizard: {e}")
+        return False
+
+# Initialize session state first (required for UI components)
+if not st.session_state.get('monte_carlo_initialized', False):
     initialize_session_state()
-    
-    # Create sidebar
-    create_sidebar()
-    
-    # Main content
-    tab1, tab2, tab3, tab4 = st.tabs(["Run Simulation", "Charts", "Year-by-Year", "Save/Load"])
-    
-    with tab1:
-        # Validation
-        total_weight = st.session_state.w_equity + st.session_state.w_bonds + st.session_state.w_real_estate + st.session_state.w_cash
-        if abs(total_weight - 1.0) > 1e-6:
-            st.error(f"⚠️ Allocation weights must sum to 1.0. Current sum: {total_weight:.3f}")
-            st.stop()
-        
-        # Initial base withdrawal rate warning
-        params = get_current_params()
-        base_wr = 0.0175 + 0.5 * (1.0 / params.cape_now)
-        if base_wr > params.upper_wr:
-            st.warning(f"⚠️ Initial withdrawal rate ({base_wr:.1%}) exceeds upper guardrail ({params.upper_wr:.1%})")
-        
-        # Run simulations button
-        if st.button("🚀 Run Simulation", type="primary"):
-            run_simulations()
-        
-        # Display results if available
-        if st.session_state.simulation_results is not None:
-            display_summary_kpis()
-            display_downloads()
-    
-    with tab2:
-        display_charts()
-    
-    with tab3:
-        display_year_by_year_table()
-    
-    with tab4:
-        save_load_section()
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("Built with Streamlit • Monte Carlo simulation with tax-aware withdrawals")
+    st.session_state.monte_carlo_initialized = True
 
+# Check if wizard was completed and apply wizard parameters AFTER session state initialization
+if st.session_state.get('wizard_completed', False) and not st.session_state.get('parameters_loaded', False):
+    st.write("🔧 DEBUG: Wizard completed flag detected, attempting parameter transfer...")
+    print(f"DEBUG [parameter transfer]: Wizard completed, applying parameters...")
+    if apply_wizard_params_to_monte_carlo():
+        st.session_state.parameters_loaded = True
+        st.success("✅ Parameters loaded from wizard successfully!")
+        st.write(f"🔧 DEBUG: Custom capital set to: {st.session_state.get('custom_capital', 'NOT SET')}")
+        st.write(f"🔧 DEBUG: Use custom capital: {st.session_state.get('use_custom_capital', 'NOT SET')}")
+        st.write(f"🔧 DEBUG: w_equity: {st.session_state.get('w_equity', 'NOT SET')}")
+        st.write(f"🔧 DEBUG: w_bonds: {st.session_state.get('w_bonds', 'NOT SET')}")
+        st.write(f"🔧 DEBUG: expense_streams: {st.session_state.get('expense_streams', 'NOT SET')}")
 
-if __name__ == "__main__":
-    main()
+        # Show ALL session state keys for debugging
+        st.write("🔧 DEBUG: All session state keys:")
+        debug_keys = [k for k in st.session_state.keys() if not k.startswith('FormSubmitter')]
+        st.write(f"Keys: {sorted(debug_keys)[:20]}...")  # Show first 20 keys
+        print(f"DEBUG [parameter transfer]: Parameters loaded and marked as complete")
+        # Rerun to refresh UI with new parameter values
+        st.rerun()
+
+# Initialize session state if not done already
+if not st.session_state.get('parameters_loaded', False):
+    st.info("""
+    🧙‍♂️ **New to retirement planning?** Try the **Setup Wizard** first for guided parameter configuration!
+
+    The wizard guides you through parameter setup with beautiful visualizations and educational content.
+
+    **Quick Access:** Use the sidebar navigation to switch to the Setup Wizard page.
+    """)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🧙‍♂️ Go to Setup Wizard", type="primary"):
+            st.switch_page("pages/wizard.py")
+
+    # Session state already initialized above
+
+# Now that parameters are loaded (either from wizard or defaults), show the main interface
+# Create sidebar
+create_sidebar()
+
+# Main content
+tab1, tab2, tab3 = st.tabs(["Run Simulation", "Charts", "Year-by-Year"])
+
+with tab1:
+    # Validation
+    total_weight = st.session_state.w_equity + st.session_state.w_bonds + st.session_state.w_real_estate + st.session_state.w_cash
+    if abs(total_weight - 1.0) > 1e-6:
+        st.error(f"⚠️ Allocation weights must sum to 1.0. Current sum: {total_weight:.3f}")
+        st.stop()
+
+    # Run simulation button
+    if st.button("🚀 Run Simulation", type="primary"):
+        run_simulations()
+
+    # Display summary KPIs
+    display_summary_kpis()
+
+    # Display AI analysis section
+    display_ai_analysis_section()
+
+with tab2:
+    display_charts()
+
+with tab3:
+    display_year_by_year_table()
+
+# Downloads section moved to end of page
+display_downloads()
+
+# Footer
+st.markdown("---")
+st.markdown("Built with Streamlit • Monte Carlo simulation with tax-aware withdrawals")

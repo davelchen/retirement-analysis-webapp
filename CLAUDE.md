@@ -5,18 +5,23 @@ This is a comprehensive Streamlit web application for retirement planning using 
 
 ## Key Architecture Decisions
 
-### Modular Design
+### Multipage Design
+- **Unified application**: Single Streamlit app with multiple pages for seamless navigation
+- **Direct parameter sharing**: No JSON file handoff required between wizard and analysis
 - **Pure functions**: Simulation engine decoupled from UI for testability
 - **Separation of concerns**: Each module has single responsibility
 - **Real dollar foundation**: All calculations in real terms, nominal for display only
 
 ### Core Components
-- `app.py`: Streamlit UI with rich tooltips and dynamic expense/income management
+- `main.py`: Streamlit multipage application entry point with page navigation
+- `pages/wizard.py`: Interactive setup wizard with parameter configuration and JSON loading
+- `pages/monte_carlo.py`: Monte Carlo analysis with advanced visualizations and manual AI triggers
 - `simulation.py`: Monte Carlo engine with vectorized NumPy operations
 - `tax.py`: Progressive tax model with bisection solver for gross-up calculations
 - `deterministic.py`: Expected-return projections without randomness
-- `charts.py`: Interactive Plotly visualizations
-- `io_utils.py`: JSON/CSV data management utilities
+- `charts.py`: Interactive Plotly visualizations with percentile path analysis
+- `io_utils.py`: JSON/CSV data management utilities with wizard JSON conversion
+- `ai_analysis.py`: Google Gemini AI integration with usage tracking and privacy controls
 
 ### Testing Strategy
 Comprehensive test suite with 100+ unit tests covering:
@@ -120,6 +125,15 @@ JSON save/load for scenario comparison and reproducible results.
 - Save: Download parameters JSON via button
 - Load: Upload JSON file, then click "Load Parameters" button for confirmation
 - Auto-load: Place personal config in `default.json` for automatic startup loading
+- **Wizard JSON Loading**: "Pick up where you left off" functionality in wizard welcome page with file preview and parameter validation
+
+### Wizard JSON Conversion
+Automatic compatibility layer between wizard and Monte Carlo analysis:
+- **Auto-detection**: `parse_parameters_upload_json()` detects wizard vs native JSON format
+- **Parameter mapping**: `convert_wizard_json_to_simulation_params()` handles 30+ parameter name conversions
+- **Structure flattening**: Converts nested wizard JSON to flat SimulationParams format
+- **Backward compatibility**: Native Monte Carlo JSON files still work unchanged
+- **Seamless handoff**: Parameters flow directly between pages without file transfers
 
 ### Privacy Protection
 Personal configuration files ignored in git:
@@ -141,9 +155,18 @@ Hypothetical California family:
 
 ### Running the Application
 ```bash
-streamlit run app.py
+# Recommended: Use the launcher script
+./run.sh
+
+# Or run directly:
+streamlit run main.py
 # Open browser to http://localhost:8501
 ```
+
+### Page Navigation
+- **Main App**: http://localhost:8501
+- **Setup Wizard**: http://localhost:8501/Wizard
+- **Monte Carlo Analysis**: http://localhost:8501/Monte_Carlo_Analysis
 
 ### Testing
 ```bash
@@ -201,12 +224,117 @@ This project demonstrates comprehensive financial modeling with professional sof
 
 ## Recent Major Updates
 
-### Enhanced Visualization Suite (Latest)
+### AI Analysis & Chat Interface Improvements (Latest - September 2025)
+**Major improvements to AI analysis experience and parameter loading reliability:**
+
+**Fixed Duplicate AI Analysis UI:**
+- **Problem**: Duplicate "Run AI Analysis" buttons appearing during analysis execution due to Streamlit rerun timing issues
+- **Root Cause**: `st.rerun()` after analysis completion caused both "ready" and "analyzing" states to render simultaneously
+- **Solution**: Removed forced rerun, implemented proper state-based conditional rendering using `analyze_button` state
+- **Pattern**: Only show "Ready to analyze" message when NOT running analysis: `if not (analyze_button or st.session_state.get('force_ai_analysis', False))`
+- **Result**: Clean UI with single AI analysis section that properly transitions between states
+
+**Enhanced Chat Interface:**
+- **Chat Input Positioning**: Restructured chat logic to process input first, then display history - moving toward proper chat app UX
+- **Improved Error Handling**: All chat errors now properly added to conversation history instead of showing duplicate error messages
+- **Session Management**: Added `st.rerun()` after chat processing to ensure new messages appear immediately
+- **Message Flow**: Eliminated immediate message displays during processing, relying on centralized history display
+
+**Income Stream Parameter Loading Fix:**
+- **Problem**: Loading JSON with empty `income_streams` arrays didn't clear existing income streams in UI
+- **Root Cause**: Parameter transfer was setting `st.session_state.income_streams = []` but UI uses `st.session_state.other_income_streams`
+- **Solution**: Fixed session state variable mapping in `pages/monte_carlo.py` lines 1831 and 1839
+- **Pattern**: Matches expense streams fix pattern using correct UI session state variables
+
+**Technical Implementation:**
+- **Streamlit State Management**: Better understanding and handling of Streamlit's execution model and rerun behavior
+- **Conditional UI Rendering**: Proper use of button state to control what UI elements are displayed
+- **Session State Synchronization**: Ensured UI widgets use correct session state variables for parameter loading
+- **Error Message Handling**: Consistent error handling patterns across AI analysis and chat interfaces
+
+### Unified Parameter Loading Architecture (September 2025)
+**Major architectural improvements for parameter management:**
+
+**Unified JSON Loading System:**
+- **Problem**: Duplicate code paths for wizard transitions vs JSON loading led to sync issues and filing status bugs
+- **Solution**: Both wizard and JSON loading now use identical approach - load params into `wizard_params`, set `wizard_completed=True`
+- **Benefits**: Single code path, no duplicate functions, consistent behavior between all parameter loading methods
+- **Pattern**: Load → Set session flags → Trigger unified parameter application on next page load
+
+**P10/P90 Path Storage Implementation:**
+- **Problem**: Year-by-year table showed identical values (~$24-25M) for P10/P50/P90 regardless of selection
+- **Root Cause**: Previous implementation reconstructed percentile paths by scaling median path, not using actual simulation data
+- **Solution**: Modified simulation engine to store actual P10/P50/P90 path details during Monte Carlo run
+- **Architecture**: Added `p10_path_details` and `p90_path_details` to `SimulationResults`, identify specific simulations corresponding to percentiles
+- **Testing**: Added 10 comprehensive unit tests validating percentile path accuracy and internal consistency
+
+**Duplicate Button Fixes:**
+- **Problem**: "Run AI Analysis" and "Run Simulation" buttons were appearing twice
+- **Solution**: Moved AI analysis entirely to sidebar, removed duplicate section from main tabs
+- **Result**: Clean UI with single button for each action
+
+**Critical Regression Fixes:**
+- **Filing Status Bug**: JSON loading caused crash with `'married_filing_jointly' not in list ['MFJ', 'Single']`
+  - **Solution**: Added filing status format conversion mapping in parameter application
+  - **Mapping**: `married_filing_jointly` → `MFJ`, `single` → `Single`
+
+- **Social Security Parameter Mismatches**: Wizard transition failed with `'SimulationParams' object has no attribute 'ss_scenario'`
+  - **Root Cause**: Parameter name inconsistencies between UI and simulation engine
+  - **Solution**: Fixed parameter mapping to use correct SimulationParams attribute names:
+    - `ss_scenario` → `ss_benefit_scenario`
+    - `ss_custom_start_year` → `ss_reduction_start_year`
+    - `ss_spouse_benefit` → `spouse_ss_annual_benefit` (with `spouse_ss_enabled` flag)
+
+- **JSON Loading Function Usage**: Initial attempts to bypass `unified_json_loader_ui()` broke the UI
+  - **Problem**: Function was returning `None` on page reruns, causing button duplication and failures
+  - **Root Cause**: Misunderstanding of the function's design - it's meant to handle the complete UI flow
+  - **Solution**: Used `unified_json_loader_ui()` as designed - it handles preview, confirmation, and returns parameters only after user confirmation
+  - **Result**: Clean, single-button experience matching wizard behavior exactly
+
+### Multipage Architecture Implementation (September 2025)
+Complete transformation to unified Streamlit multipage application:
+
+**Architecture Changes:**
+- **Unified Entry Point**: `main.py` serves as multipage application controller
+- **Page Structure**: `pages/wizard.py` (setup) and `pages/monte_carlo.py` (analysis)
+- **Seamless Navigation**: Direct parameter sharing via `st.session_state` - no JSON files required
+- **Enhanced Launcher**: Updated `run.sh` for single-app deployment
+
+**JSON Compatibility Layer:**
+- **Auto-Detection**: `parse_parameters_upload_json()` detects wizard vs native JSON formats
+- **Parameter Mapping**: `convert_wizard_json_to_simulation_params()` handles 30+ parameter name conversions
+- **Structure Flattening**: Converts nested wizard JSON to flat SimulationParams format
+- **Backward Compatibility**: Existing Monte Carlo JSON files continue to work unchanged
+
+**User Experience Improvements:**
+- **Single Port**: Everything runs on http://localhost:8501 (no more port juggling)
+- **Direct Access**: Bookmark wizard (*/Wizard) or analysis (*/Monte_Carlo_Analysis) pages
+- **Smart Workflow**: Wizard completion button navigates directly to analysis
+- **Shared State**: Parameters flow automatically between pages without file transfers
+
+**Technical Implementation:**
+- **Session State Management**: Centralized parameter storage in `st.session_state`
+- **Page Navigation**: Streamlit's native `st.switch_page()` for seamless transitions
+- **Parameter Validation**: Comprehensive validation and error handling
+- **Legacy Support**: JSON download/upload still available for backup and sharing
+
+### Enhanced Visualization Suite
 - **High-resolution charts**: Terminal wealth distribution with 100-200 bins and kernel density overlay
 - **New chart types**: 5 additional visualizations including Monte Carlo path samples, success probability over time, cash flow waterfall, sequence of returns analysis, and drawdown analysis
 - **Improved rendering**: Fixed overlapping elements with clean subtitle formatting
 - **Statistical depth**: Comprehensive percentile analysis and failure threshold visualization
 - **Interactive elements**: Hover details and dynamic chart controls
+- **Percentile path analysis**: P10/P50/P90 path selection for year-by-year tables with pessimistic, median, and optimistic scenarios
+
+### AI Analysis Features
+- **Google Gemini Integration**: Advanced AI-powered retirement analysis with multiple model options
+- **Manual Trigger Controls**: Separated AI analysis from simulation with dedicated "Run AI Analysis" button
+- **Usage Tracking**: Real-time monitoring of token consumption and API request counts
+- **Privacy Protection**: Comprehensive warnings about free tier data usage for AI training
+- **Query Monitoring**: Session-based tracking with daily usage limits and warnings
+- **Model Selection**: Support for Gemini 2.5 Pro, Flash models, and other variants
+- **Error Handling**: Graceful fallbacks with informative error messages
+- **Chat Interface**: Interactive Q&A with context-aware responses about simulation results
 
 ### Advanced Market Regime Modeling
 - **8 predefined scenarios**: baseline, recession_recover, grind_lower, late_recession, inflation_shock, long_bear, tech_bubble, plus custom
@@ -280,3 +408,34 @@ This project demonstrates comprehensive financial modeling with professional sof
 - Enhanced `tests/test_deterministic.py`: 2 new tests for deterministic projector integration
 - Fixed regression: Updated depletion test to account for Social Security benefits improving sustainability
 - **All 83+ tests passing**: Comprehensive validation with no regressions
+
+### AI Analysis & User Experience Enhancements (September 2025)
+Major improvements to AI integration, user experience, and data management:
+
+**AI Analysis Improvements:**
+- **Manual Trigger Control**: Separated AI analysis from automatic simulation run with dedicated "🧠 Run AI Analysis" button
+- **Usage Tracking**: Real-time monitoring of token consumption, request counts, and daily usage with warnings at 50% and 80% of limits
+- **Enhanced Privacy Warnings**: Comprehensive notices about Gemini free tier data usage for AI training in both wizard and Monte Carlo interfaces
+- **Model Selection**: Support for Gemini 2.5 Pro, Flash models, and other variants with performance descriptions
+- **Error Handling**: Improved error messages with specific guidance for rate limits, quota exceeded, and API key issues
+
+**User Experience Enhancements:**
+- **JSON Parameter Loading**: "Pick up where you left off" functionality in wizard welcome page with file upload, parameter preview, and automatic type conversion
+- **Percentile Path Analysis**: P10/P50/P90 path selection dropdown for year-by-year tables showing pessimistic, median, and optimistic scenarios
+- **Numeric Type Safety**: Fixed Streamlit mixed numeric types errors for all number inputs when loading JSON parameters
+- **Enhanced Navigation**: Seamless parameter transfer between wizard and Monte Carlo analysis with improved session state management
+
+**Technical Implementation:**
+- **Usage Metadata Extraction**: Captures prompt tokens, completion tokens, and total tokens from Gemini API responses
+- **Session-Based Tracking**: Maintains usage history with automatic cleanup (last 50 entries) and daily totals calculation
+- **Privacy Controls**: Explicit warnings and user consent for AI data usage with clear privacy implications
+- **Parameter Conversion**: Robust handling of both wizard JSON and flat Monte Carlo parameter formats with type safety
+- **Percentile Calculations**: Wealth path scaling algorithm to approximate P10/P90 scenarios from existing Monte Carlo results
+
+**Files Modified:**
+- `pages/wizard.py`: Added JSON loading, numeric type fixes, privacy warnings
+- `pages/monte_carlo.py`: Manual AI triggers, usage display, P10/P90 dropdowns
+- `ai_analysis.py`: Usage tracking, metadata extraction, enhanced error handling
+- `CLAUDE.md`: Comprehensive documentation updates
+
+All features maintain backward compatibility while significantly improving user experience and privacy controls for AI-powered retirement analysis.

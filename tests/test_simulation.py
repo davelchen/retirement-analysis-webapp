@@ -621,3 +621,203 @@ class TestUtilityFunctions:
         ss_income = simulator._get_social_security_income(2035)
         expected = 40_000 * (1 - 0.12)  # 12% custom cut
         assert abs(ss_income - expected) < 1
+
+
+class TestPercentilePathDetails:
+    """Test P10/P50/P90 path details functionality"""
+
+    def test_simulation_results_has_percentile_paths(self):
+        """Test that SimulationResults includes P10/P50/P90 path details"""
+        params = SimulationParams(num_sims=100, random_seed=42, horizon_years=10)
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Check that all path details exist
+        assert hasattr(results, 'median_path_details')
+        assert hasattr(results, 'p10_path_details')
+        assert hasattr(results, 'p90_path_details')
+
+        # Check that all path details are dictionaries with expected keys
+        expected_keys = [
+            'years', 'start_assets', 'end_assets', 'base_spending',
+            'adjusted_base_spending', 'college_topup', 'one_times',
+            're_income', 'other_income', 'taxable_income', 'taxes',
+            'net_need', 'gross_withdrawal', 'growth', 'inheritance',
+            'withdrawal_rate', 'floor_applied', 'ceiling_applied',
+            'guardrail_action', 'equity_allocation', 'bonds_allocation',
+            'real_estate_allocation', 'cash_allocation'
+        ]
+
+        for path_details in [results.median_path_details, results.p10_path_details, results.p90_path_details]:
+            assert isinstance(path_details, dict)
+            for key in expected_keys:
+                assert key in path_details, f"Missing key: {key}"
+                assert isinstance(path_details[key], list), f"Key {key} should be list"
+                assert len(path_details[key]) == params.horizon_years, f"Key {key} should have {params.horizon_years} values"
+
+    def test_percentile_paths_have_different_terminal_values(self):
+        """Test that P10/P50/P90 paths have significantly different terminal wealth"""
+        params = SimulationParams(num_sims=1000, random_seed=42, horizon_years=20)
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Get terminal wealth values from path details
+        p10_terminal = results.p10_path_details['end_assets'][-1]
+        p50_terminal = results.median_path_details['end_assets'][-1]
+        p90_terminal = results.p90_path_details['end_assets'][-1]
+
+        # Verify ordering: P10 < P50 < P90
+        assert p10_terminal < p50_terminal, f"P10 ({p10_terminal:,.0f}) should be less than P50 ({p50_terminal:,.0f})"
+        assert p50_terminal < p90_terminal, f"P50 ({p50_terminal:,.0f}) should be less than P90 ({p90_terminal:,.0f})"
+
+        # Check that differences are substantial (not just rounding errors)
+        assert (p50_terminal / p10_terminal) > 1.5, "P50 should be significantly higher than P10"
+        assert (p90_terminal / p50_terminal) > 1.5, "P90 should be significantly higher than P50"
+
+    def test_percentile_paths_match_wealth_percentiles(self):
+        """Test that path terminal values match overall terminal wealth percentiles"""
+        params = SimulationParams(num_sims=1000, random_seed=42, horizon_years=15)
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Calculate percentiles from terminal wealth distribution
+        wealth_p10 = np.percentile(results.terminal_wealth, 10)
+        wealth_p50 = np.percentile(results.terminal_wealth, 50)
+        wealth_p90 = np.percentile(results.terminal_wealth, 90)
+
+        # Get terminal values from path details
+        path_p10 = results.p10_path_details['end_assets'][-1]
+        path_p50 = results.median_path_details['end_assets'][-1]
+        path_p90 = results.p90_path_details['end_assets'][-1]
+
+        # Should be close (within 5% tolerance since we're selecting specific simulations)
+        tolerance = 0.05
+        assert abs(path_p10 - wealth_p10) / wealth_p10 < tolerance, f"P10 path ({path_p10:,.0f}) doesn't match wealth P10 ({wealth_p10:,.0f})"
+        assert abs(path_p50 - wealth_p50) / wealth_p50 < tolerance, f"P50 path ({path_p50:,.0f}) doesn't match wealth P50 ({wealth_p50:,.0f})"
+        assert abs(path_p90 - wealth_p90) / wealth_p90 < tolerance, f"P90 path ({path_p90:,.0f}) doesn't match wealth P90 ({wealth_p90:,.0f})"
+
+    def test_percentile_paths_internal_consistency(self):
+        """Test that percentile path values are internally consistent"""
+        params = SimulationParams(num_sims=500, random_seed=42, horizon_years=10)
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        for label, path_details in [("P10", results.p10_path_details),
+                                   ("P50", results.median_path_details),
+                                   ("P90", results.p90_path_details)]:
+            # Check that all arrays have the same length
+            first_key = list(path_details.keys())[0]
+            expected_len = len(path_details[first_key])
+
+            for key, values in path_details.items():
+                assert len(values) == expected_len, f"{label} {key} has wrong length: {len(values)} vs {expected_len}"
+
+            # Check that start_assets and end_assets have reasonable relationship
+            start_assets = path_details['start_assets']
+            end_assets = path_details['end_assets']
+            gross_withdrawals = path_details['gross_withdrawal']
+            growth = path_details['growth']
+            inheritance = path_details['inheritance']
+
+            # For each year, check wealth flow: start + growth + inheritance - withdrawal = end
+            for i in range(len(start_assets)):
+                expected_end = start_assets[i] + growth[i] + inheritance[i] - gross_withdrawals[i]
+                actual_end = end_assets[i]
+                # Allow some tolerance for floating point precision
+                tolerance = max(1000, abs(expected_end) * 0.01)  # 1% or $1000, whichever is larger
+                assert abs(actual_end - expected_end) < tolerance, f"{label} Year {i}: wealth flow inconsistent"
+
+    def test_percentile_path_realistic_values(self):
+        """Test that percentile path values are realistic and non-negative where appropriate"""
+        params = SimulationParams(num_sims=200, random_seed=42, horizon_years=5)
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        for label, path_details in [("P10", results.p10_path_details),
+                                   ("P50", results.median_path_details),
+                                   ("P90", results.p90_path_details)]:
+            # Assets should be non-negative
+            for i, assets in enumerate(path_details['start_assets']):
+                assert assets >= 0, f"{label} start_assets[{i}] is negative: {assets}"
+            for i, assets in enumerate(path_details['end_assets']):
+                assert assets >= 0, f"{label} end_assets[{i}] is negative: {assets}"
+
+            # Spending should be positive
+            for i, spending in enumerate(path_details['adjusted_base_spending']):
+                assert spending > 0, f"{label} adjusted_base_spending[{i}] should be positive: {spending}"
+
+            # Taxes should be non-negative
+            for i, taxes in enumerate(path_details['taxes']):
+                assert taxes >= 0, f"{label} taxes[{i}] should be non-negative: {taxes}"
+
+            # Withdrawal rates should be reasonable (0-100%)
+            for i, wr in enumerate(path_details['withdrawal_rate']):
+                assert 0 <= wr <= 1.0, f"{label} withdrawal_rate[{i}] should be 0-100%: {wr*100:.1f}%"
+
+            # Allocations should sum to 1.0
+            for i in range(len(path_details['years'])):
+                allocation_sum = (path_details['equity_allocation'][i] +
+                                path_details['bonds_allocation'][i] +
+                                path_details['real_estate_allocation'][i] +
+                                path_details['cash_allocation'][i])
+                assert abs(allocation_sum - 1.0) < 0.01, f"{label} allocations don't sum to 1.0 in year {i}: {allocation_sum}"
+
+
+class TestGetPercentilePathDetails:
+    """Test get_percentile_path_details function from monte_carlo.py"""
+
+    def setup_method(self):
+        """Set up test data"""
+        params = SimulationParams(num_sims=100, random_seed=42, horizon_years=5)
+        simulator = RetirementSimulator(params)
+        self.results = simulator.run_simulation()
+
+    def test_get_percentile_path_details_p10(self):
+        """Test getting P10 path details"""
+        from pages.monte_carlo import get_percentile_path_details
+        path_details = get_percentile_path_details(self.results, 10)
+
+        # Should return P10 path details
+        assert path_details is self.results.p10_path_details
+        assert 'end_assets' in path_details
+        assert len(path_details['end_assets']) == 5
+
+    def test_get_percentile_path_details_p50(self):
+        """Test getting P50 (median) path details"""
+        from pages.monte_carlo import get_percentile_path_details
+        path_details = get_percentile_path_details(self.results, 50)
+
+        # Should return median path details
+        assert path_details is self.results.median_path_details
+
+    def test_get_percentile_path_details_p90(self):
+        """Test getting P90 path details"""
+        from pages.monte_carlo import get_percentile_path_details
+        path_details = get_percentile_path_details(self.results, 90)
+
+        # Should return P90 path details
+        assert path_details is self.results.p90_path_details
+
+    def test_get_percentile_path_details_unsupported(self):
+        """Test getting unsupported percentile defaults to median"""
+        from pages.monte_carlo import get_percentile_path_details
+        path_details = get_percentile_path_details(self.results, 25)
+
+        # Should default to median
+        assert path_details is self.results.median_path_details
+
+    def test_percentile_paths_different_terminal_wealth(self):
+        """Test that the three percentile paths have different terminal wealth values"""
+        from pages.monte_carlo import get_percentile_path_details
+
+        p10_path = get_percentile_path_details(self.results, 10)
+        p50_path = get_percentile_path_details(self.results, 50)
+        p90_path = get_percentile_path_details(self.results, 90)
+
+        p10_terminal = p10_path['end_assets'][-1]
+        p50_terminal = p50_path['end_assets'][-1]
+        p90_terminal = p90_path['end_assets'][-1]
+
+        # Values should be ordered and distinct
+        assert p10_terminal < p50_terminal < p90_terminal
+        assert p10_terminal != p50_terminal != p90_terminal

@@ -964,5 +964,289 @@ def create_drawdown_analysis(wealth_paths: np.ndarray,
         hovermode="x unified",
         legend=dict(x=0.7, y=0.02)
     )
-    
+
+    return fig
+
+
+def create_income_sources_stacked_area(year_by_year_details: Dict,
+                                     title: str = "Income Sources Over Time",
+                                     currency_format: str = "real") -> go.Figure:
+    """
+    Create stacked area chart showing different income sources over time.
+
+    Args:
+        year_by_year_details: Dictionary with year-by-year simulation details
+        title: Chart title
+        currency_format: "real" or "nominal" for axis labels
+
+    Returns:
+        Plotly figure
+    """
+    years = year_by_year_details.get('years', [])
+    if not years:
+        return go.Figure()
+
+    # Get income components (convert to thousands for readability)
+    portfolio_withdrawals = np.array(year_by_year_details.get('gross_withdrawal', [0] * len(years))) / 1000
+    social_security = np.array(year_by_year_details.get('social_security_income', [0] * len(years))) / 1000
+    other_income = np.array(year_by_year_details.get('other_income', [0] * len(years))) / 1000
+    re_income = np.array(year_by_year_details.get('re_income', [0] * len(years))) / 1000
+
+    fig = go.Figure()
+
+    # Stack order from bottom to top (reverse order for stacking)
+    income_sources = [
+        ("Portfolio Withdrawals", portfolio_withdrawals, 'lightblue'),
+        ("Social Security", social_security, 'lightgreen'),
+        ("Other Income", other_income, 'lightcoral'),
+        ("Real Estate Income", re_income, 'lightyellow')
+    ]
+
+    # Add traces in reverse order for proper stacking
+    for name, values, color in income_sources:
+        # Only add if there's any meaningful income from this source
+        if np.sum(values) > 0:
+            fig.add_trace(go.Scatter(
+                x=years,
+                y=values,
+                mode='lines',
+                stackgroup='one',
+                name=name,
+                line=dict(width=0.5),
+                fillcolor=color,
+                hovertemplate=f"<b>{name}</b><br>" +
+                             "<b>Year:</b> %{x}<br>" +
+                             "<b>Amount:</b> $%{y:.0f}K<br>" +
+                             "<extra></extra>"
+            ))
+
+    # Calculate total income for context
+    total_income = portfolio_withdrawals + social_security + other_income + re_income
+
+    # Add total income line for reference
+    if np.sum(total_income) > 0:
+        fig.add_trace(go.Scatter(
+            x=years,
+            y=total_income,
+            mode='lines',
+            name='Total Income',
+            line=dict(color='darkblue', width=3, dash='dash'),
+            hovertemplate="<b>Total Income</b><br>" +
+                         "<b>Year:</b> %{x}<br>" +
+                         "<b>Total:</b> $%{y:.0f}K<br>" +
+                         "<extra></extra>"
+        ))
+
+    # Add annotations showing the income transition
+    if len(years) > 10:
+        mid_year = years[len(years)//2]
+        mid_idx = len(years)//2
+
+        # Show percentage breakdown at midpoint
+        mid_portfolio = portfolio_withdrawals[mid_idx]
+        mid_ss = social_security[mid_idx]
+        mid_total = total_income[mid_idx]
+
+        if mid_total > 0:
+            portfolio_pct = (mid_portfolio / mid_total) * 100
+            ss_pct = (mid_ss / mid_total) * 100
+
+            annotation_text = (
+                f"<b>{mid_year} Income Mix</b><br>"
+                f"Portfolio: {portfolio_pct:.0f}%<br>"
+                f"Social Security: {ss_pct:.0f}%"
+            )
+
+            fig.add_annotation(
+                x=mid_year,
+                y=mid_total * 0.7,
+                text=annotation_text,
+                showarrow=True,
+                arrowhead=2,
+                arrowcolor="black",
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="black",
+                borderwidth=1,
+                align="left"
+            )
+
+    # Format chart
+    currency_label = "Real" if currency_format == "real" else "Nominal"
+    fig.update_layout(
+        title=f"{title} ({currency_label} Dollars)",
+        xaxis_title="Year",
+        yaxis_title=f"Annual Income (${currency_label} Thousands)",
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(
+            x=0.02, y=0.98,
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="lightgray",
+            borderwidth=1
+        ),
+        height=500
+    )
+
+    return fig
+
+
+def create_asset_allocation_evolution(params: 'SimulationParams',
+                                     year_by_year_details: Dict,
+                                     title: str = "Asset Allocation Evolution",
+                                     currency_format: str = "real") -> go.Figure:
+    """
+    Create stacked area chart showing asset allocation evolution over time.
+    Shows both static allocation and age-based glide path evolution.
+
+    Args:
+        params: SimulationParams object with allocation weights
+        year_by_year_details: Dictionary with year-by-year simulation details
+        title: Chart title
+        currency_format: "real" or "nominal" for axis labels
+
+    Returns:
+        Plotly figure
+    """
+    years = year_by_year_details.get('years', [])
+    if not years:
+        return go.Figure()
+
+    # Get portfolio values over time
+    portfolio_values = np.array(year_by_year_details.get('start_assets', [0] * len(years)))
+
+    # Calculate years since retirement start for glide path
+    years_since_start = np.array(years) - years[0]
+
+    # Create age-based glide path (becoming more conservative over time)
+    # Start with current allocation, gradually shift to more conservative
+    initial_equity = params.w_equity
+    initial_bonds = params.w_bonds
+    initial_re = params.w_real_estate
+    initial_cash = params.w_cash
+
+    # Create glide path: reduce equity by ~0.5% per year, increase bonds/cash
+    equity_reduction_per_year = 0.005  # 0.5% per year
+
+    equity_weights = []
+    bonds_weights = []
+    re_weights = []
+    cash_weights = []
+
+    for years_elapsed in years_since_start:
+        # Calculate equity reduction (capped at 50% of original)
+        equity_reduction = min(equity_reduction_per_year * years_elapsed, initial_equity * 0.5)
+        current_equity = max(initial_equity - equity_reduction, initial_equity * 0.5)
+
+        # Redistribute reduced equity proportionally to bonds and cash
+        reduction_amount = initial_equity - current_equity
+        bonds_increase = reduction_amount * 0.7  # 70% to bonds
+        cash_increase = reduction_amount * 0.3   # 30% to cash
+
+        current_bonds = initial_bonds + bonds_increase
+        current_cash = initial_cash + cash_increase
+        current_re = initial_re  # Keep RE allocation stable
+
+        # Normalize to ensure they sum to 1.0
+        total = current_equity + current_bonds + current_re + current_cash
+        if total > 0:
+            current_equity /= total
+            current_bonds /= total
+            current_re /= total
+            current_cash /= total
+
+        equity_weights.append(current_equity)
+        bonds_weights.append(current_bonds)
+        re_weights.append(current_re)
+        cash_weights.append(current_cash)
+
+    # Convert to numpy arrays
+    equity_weights = np.array(equity_weights)
+    bonds_weights = np.array(bonds_weights)
+    re_weights = np.array(re_weights)
+    cash_weights = np.array(cash_weights)
+
+    # Calculate dollar amounts for each asset class
+    equity_values = portfolio_values * equity_weights / 1000  # Convert to thousands
+    bonds_values = portfolio_values * bonds_weights / 1000
+    re_values = portfolio_values * re_weights / 1000
+    cash_values = portfolio_values * cash_weights / 1000
+
+    fig = go.Figure()
+
+    # Asset allocation traces (stacked from bottom to top)
+    allocations = [
+        ("Cash", cash_values, 'lightgray'),
+        ("Real Estate", re_values, 'lightyellow'),
+        ("Bonds", bonds_values, 'lightcoral'),
+        ("Equities", equity_values, 'lightblue')
+    ]
+
+    # Add stacked areas
+    for name, values, color in allocations:
+        # Only add if there's meaningful allocation
+        if np.max(values) > 0:
+            fig.add_trace(go.Scatter(
+                x=years,
+                y=values,
+                mode='lines',
+                stackgroup='one',
+                name=name,
+                line=dict(width=0.5),
+                fillcolor=color,
+                hovertemplate=f"<b>{name}</b><br>" +
+                             "<b>Year:</b> %{x}<br>" +
+                             "<b>Value:</b> $%{y:.0f}K<br>" +
+                             "<extra></extra>"
+            ))
+
+    # Add allocation percentage annotations at key points
+    if len(years) > 10:
+        # Show allocation at start and end
+        start_year = years[0]
+        end_year = years[-1]
+        start_equity_pct = equity_weights[0] * 100
+        end_equity_pct = equity_weights[-1] * 100
+
+        # Annotation showing the glide path
+        annotation_text = (
+            f"<b>Glide Path Evolution</b><br>"
+            f"{start_year}: {start_equity_pct:.0f}% Equities<br>"
+            f"{end_year}: {end_equity_pct:.0f}% Equities<br>"
+            f"Shift: {start_equity_pct - end_equity_pct:.1f}% to Bonds/Cash"
+        )
+
+        mid_year = years[len(years)//2]
+        mid_total = np.sum([equity_values[len(years)//2], bonds_values[len(years)//2],
+                           re_values[len(years)//2], cash_values[len(years)//2]])
+
+        fig.add_annotation(
+            x=mid_year,
+            y=mid_total * 0.8,
+            text=annotation_text,
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor="black",
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="black",
+            borderwidth=1,
+            align="left"
+        )
+
+    # Format chart
+    currency_label = "Real" if currency_format == "real" else "Nominal"
+    fig.update_layout(
+        title=f"{title} ({currency_label} Dollars)<br><sub>Age-Based Glide Path: Equity allocation decreases 0.5% per year</sub>",
+        xaxis_title="Year",
+        yaxis_title=f"Portfolio Value (${currency_label} Thousands)",
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(
+            x=0.02, y=0.98,
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="lightgray",
+            borderwidth=1
+        ),
+        height=500
+    )
+
     return fig

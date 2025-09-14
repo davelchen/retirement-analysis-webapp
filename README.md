@@ -1,6 +1,6 @@
-# Monte Carlo Retirement Simulator
+# Retirement Analysis Suite
 
-A comprehensive **Streamlit web application** for retirement planning using Monte Carlo simulation with **tax-aware withdrawals** and **Guyton-Klinger guardrails**. Features an intuitive UI with rich parameter tooltips, multiple expense/income management, and interactive visualizations.
+A comprehensive **Streamlit multipage application** for retirement planning featuring an interactive **Setup Wizard** and advanced **Monte Carlo simulation** with tax-aware withdrawals and Guyton-Klinger guardrails. Seamlessly navigate between guided parameter setup and sophisticated financial analysis.
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-Educational-green.svg)
@@ -11,19 +11,34 @@ A comprehensive **Streamlit web application** for retirement planning using Mont
 
 ```bash
 # Clone the repository
-git clone https://github.com/username/retirement-simulator.git
-cd retirement-simulator
+git clone https://github.com/username/retirement-analysis-suite.git
+cd retirement-analysis-suite
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the application
-streamlit run app.py
+# Run the unified application (recommended)
+./run.sh
+
+# Or run directly:
+streamlit run main.py
 ```
 
 **Open your browser to `http://localhost:8501`**
 
+### 🧭 Navigation Options
+- **Main App**: http://localhost:8501 (choose your starting point)
+- **Setup Wizard**: http://localhost:8501/Wizard (guided parameter configuration)
+- **Monte Carlo Analysis**: http://localhost:8501/Monte_Carlo_Analysis (advanced simulations)
+
 ## ✨ Key Features
+
+### 🧙‍♂️ **Interactive Setup Wizard**
+- **Step-by-step guidance** through all retirement planning parameters
+- **Beautiful visualizations** - pie charts, scatter plots, timelines
+- **Educational content** with parameter descriptions and best practices
+- **Real-time feedback** showing impact of your choices
+- **Seamless handoff** to Monte Carlo analysis with one click
 
 ### 🎲 **Advanced Monte Carlo Engine**
 - Up to **50,000 simulations** with configurable market scenarios
@@ -56,32 +71,55 @@ streamlit run app.py
 - **Wealth distribution histograms** and percentile bands
 - **Withdrawal rate tracking** with guardrail visualization
 - **Year-by-year detailed tables** with real/nominal views
+- **Percentile path analysis** - P10/P50/P90 scenario selection for pessimistic, median, and optimistic projections
 
 ### 💾 **Data Management**
 - **JSON parameter save/load** for scenario comparison
 - **CSV exports** for external analysis
 - **Comprehensive reporting** with summary statistics
 - **Reproducible results** with optional random seeds
+- **"Pick up where you left off"** - upload JSON files in wizard welcome page
 
-## 🏗️ Project Structure
+### 🤖 **AI-Powered Analysis**
+- **Google Gemini Integration** with manual trigger controls
+- **Multiple model options** - Gemini 2.5 Pro, Flash variants with performance descriptions
+- **Usage tracking** - real-time token consumption and daily quota monitoring
+- **Privacy protection** - comprehensive warnings about free tier data usage
+- **Interactive chat** - Q&A interface with context-aware responses about your results
+- **Smart error handling** - graceful fallbacks with detailed guidance
 
+## 🏗️ Architecture & Structure
+
+### Multipage Application Design
 ```
-├── app.py                      # 🖥️  Main Streamlit application
+├── main.py                     # 🏠 Multipage entry point & navigation
+├── pages/                      # 📄 Streamlit pages
+│   ├── wizard.py               # 🧙‍♂️ Interactive setup wizard with JSON loading
+│   └── monte_carlo.py          # 📊 Monte Carlo analysis & AI integration
 ├── simulation.py               # 🎲 Monte Carlo simulation engine
 ├── deterministic.py            # 📊 Expected-return projections
 ├── tax.py                      # 💰 Tax calculations & gross-up solver
 ├── charts.py                   # 📈 Plotly visualization builders
-├── io_utils.py                 # 💾 Data import/export utilities
-├── tests/                      # 🧪 Comprehensive test suite
+├── io_utils.py                 # 💾 Data import/export & JSON conversion
+├── ai_analysis.py              # 🤖 Google Gemini AI integration & usage tracking
+├── tests/                      # 🧪 Comprehensive test suite (83+ tests)
 │   ├── test_simulation.py      #     Core simulation tests
-│   ├── test_tax.py             #     Tax calculation tests  
+│   ├── test_tax.py             #     Tax calculation tests
 │   ├── test_io.py              #     I/O and serialization tests
 │   ├── test_deterministic.py   #     Deterministic projection tests
 │   └── test_app_integration.py #     UI integration tests
+├── run.sh                      # 🚀 Enhanced launcher script
 ├── requirements.txt            # 📦 Python dependencies
-├── .gitignore                  # 🚫 Git ignore patterns
+├── CLAUDE.md                   # 🤖 Technical documentation & context
+├── WIZARD_README.md            # 🧙‍♂️ Setup wizard documentation
 └── README.md                   # 📖 This file
 ```
+
+### JSON Compatibility Layer
+- **Auto-detection**: Wizard JSON (nested) vs Native JSON (flat) formats
+- **Parameter mapping**: 30+ parameter name conversions handled automatically
+- **Seamless handoff**: Parameters flow directly between wizard and analysis
+- **Backward compatibility**: Existing configuration files continue to work
 
 ## 🎛️ Configuration Options
 
@@ -146,6 +184,13 @@ The application includes a **realistic California family scenario** with:
 - **Income Optimization**: Model part-time work and consulting income
 - **Inheritance Impact**: Test timing and amount sensitivity
 
+### **AI-Enhanced Analysis**
+- **Setup AI**: Enable AI analysis and enter free Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+- **Manual Trigger**: Click "🧠 Run AI Analysis" button after running simulation for personalized insights
+- **Monitor Usage**: Track token consumption and daily quota with real-time warnings
+- **Interactive Chat**: Ask follow-up questions about your retirement plan with context-aware responses
+- **Privacy Control**: Review comprehensive warnings about free tier data usage before enabling
+
 ## 🧪 Testing & Validation
 
 **89 comprehensive unit tests** covering all major functionality:
@@ -167,6 +212,49 @@ pytest tests/test_simulation.py -v
 - ✅ **Data Management** (14 tests): Parameter serialization, CSV exports
 - ✅ **Deterministic Models** (14 tests): Expected return projections  
 - ✅ **UI Integration** (11 tests): Parameter conversion, validation
+
+## 🚀 Deployment & Configuration
+
+### Local Development
+```bash
+# Recommended: Use enhanced launcher
+./run.sh
+
+# Or run directly
+streamlit run main.py
+```
+
+### Production Deployment
+```bash
+# Custom port and host
+streamlit run main.py --server.port 8080 --server.address 0.0.0.0
+
+# With configuration options
+streamlit run main.py --server.maxUploadSize=200 --server.maxMessageSize=200
+```
+
+### Docker Deployment
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+EXPOSE 8501
+HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
+CMD ["streamlit", "run", "main.py", "--server.address=0.0.0.0"]
+```
+
+### Environment Configuration
+```bash
+# Optional environment variables
+export STREAMLIT_SERVER_PORT=8501
+export STREAMLIT_SERVER_ADDRESS=0.0.0.0
+export STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
+# Personal configuration (auto-loads on startup)
+# Create default.json in project root (ignored by git)
+```
 
 ## 🔧 Technical Architecture
 

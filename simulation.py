@@ -21,6 +21,10 @@ class SimulationParams:
     w_bonds: float = 0.2
     w_real_estate: float = 0.15
     w_cash: float = 0.05
+
+    # Glide path (age-based allocation adjustment)
+    glide_path_enabled: bool = False
+    equity_reduction_per_year: float = 0.005  # 0.5% per year default
     
     # Return model (annual, real)
     equity_mean: float = 0.05
@@ -125,6 +129,8 @@ class SimulationResults:
     years_depleted: np.ndarray
     success_rate: float
     median_path_details: Dict
+    p10_path_details: Dict
+    p90_path_details: Dict
 
 
 class RetirementSimulator:
@@ -226,7 +232,7 @@ class RetirementSimulator:
 
         # Primary Social Security
         if self.params.social_security_enabled:
-            from app import calculate_social_security_benefit
+            from tax_utils import calculate_social_security_benefit
             total_ss_income += calculate_social_security_benefit(
                 year=year,
                 start_year=self.params.start_year,
@@ -239,7 +245,7 @@ class RetirementSimulator:
 
         # Spousal Social Security
         if self.params.spouse_ss_enabled:
-            from app import calculate_social_security_benefit
+            from tax_utils import calculate_social_security_benefit
             total_ss_income += calculate_social_security_benefit(
                 year=year,
                 start_year=self.params.start_year,
@@ -284,6 +290,40 @@ class RetirementSimulator:
         
         return spending, floor_applied, ceiling_applied
     
+    def _get_allocation_weights(self, year_offset: int) -> Tuple[float, float, float, float]:
+        """Get asset allocation weights for given year, applying glide path if enabled"""
+        if not self.params.glide_path_enabled:
+            # Static allocation - use original weights
+            return (self.params.w_equity, self.params.w_bonds,
+                   self.params.w_real_estate, self.params.w_cash)
+
+        # Calculate glide path adjustment
+        equity_reduction = self.params.equity_reduction_per_year * year_offset
+        adjusted_equity = max(0.1, self.params.w_equity - equity_reduction)  # Minimum 10% equity
+
+        # Distribute reduced equity proportionally to other assets
+        reduction_amount = self.params.w_equity - adjusted_equity
+
+        # Original non-equity weights
+        orig_non_equity = self.params.w_bonds + self.params.w_real_estate + self.params.w_cash
+
+        if orig_non_equity > 0:
+            # Distribute proportionally
+            bonds_share = self.params.w_bonds / orig_non_equity
+            re_share = self.params.w_real_estate / orig_non_equity
+            cash_share = self.params.w_cash / orig_non_equity
+
+            adjusted_bonds = self.params.w_bonds + (reduction_amount * bonds_share)
+            adjusted_re = self.params.w_real_estate + (reduction_amount * re_share)
+            adjusted_cash = self.params.w_cash + (reduction_amount * cash_share)
+        else:
+            # Fallback: add all to bonds
+            adjusted_bonds = self.params.w_bonds + reduction_amount
+            adjusted_re = self.params.w_real_estate
+            adjusted_cash = self.params.w_cash
+
+        return (adjusted_equity, adjusted_bonds, adjusted_re, adjusted_cash)
+
     def _get_return_means(self, year_offset: int) -> Tuple[float, float, float, float]:
         """Get return means based on regime"""
         base_returns = (self.params.equity_mean, self.params.bonds_mean, 
@@ -371,29 +411,35 @@ class RetirementSimulator:
         guardrail_hits = np.zeros(self.params.num_sims)
         years_depleted = np.full(self.params.num_sims, -1)  # -1 means no depletion
         
-        # Track median path details for the year-by-year table
-        median_sim_idx = self.params.num_sims // 2
-        median_details = {
-            'years': [],
-            'start_assets': [],
-            'base_spending': [],
-            'floor_applied': [],
-            'ceiling_applied': [],
-            'guardrail_action': [],
-            'adjusted_base_spending': [],
-            'college_topup': [],
-            'one_times': [],
-            're_income': [],
-            'other_income': [],
-            'taxable_income': [],
-            'taxes': [],
-            'net_need': [],
-            'gross_withdrawal': [],
-            'growth': [],
-            'inheritance': [],
-            'end_assets': [],
-            'withdrawal_rate': []
-        }
+        # Initialize path tracking for all simulations
+        all_path_details = []
+        for sim in range(self.params.num_sims):
+            path_details = {
+                'years': [],
+                'start_assets': [],
+                'base_spending': [],
+                'floor_applied': [],
+                'ceiling_applied': [],
+                'guardrail_action': [],
+                'adjusted_base_spending': [],
+                'college_topup': [],
+                'one_times': [],
+                're_income': [],
+                'other_income': [],
+                'taxable_income': [],
+                'taxes': [],
+                'net_need': [],
+                'gross_withdrawal': [],
+                'growth': [],
+                'inheritance': [],
+                'end_assets': [],
+                'withdrawal_rate': [],
+                'equity_allocation': [],
+                'bonds_allocation': [],
+                'real_estate_allocation': [],
+                'cash_allocation': []
+            }
+            all_path_details.append(path_details)
         
         # Initial base spending from CAPE rule
         initial_base_spend = self._get_base_withdrawal_rate() * self.params.start_capital
@@ -442,16 +488,17 @@ class RetirementSimulator:
                 # Generate returns
                 year_offset = year_idx
                 eq_mean, bond_mean, re_mean, cash_mean = self._get_return_means(year_offset)
-                
+
                 returns = np.array([
                     np.random.normal(eq_mean, self.params.equity_vol),
                     np.random.normal(bond_mean, self.params.bonds_vol),
                     np.random.normal(re_mean, self.params.real_estate_vol),
                     np.random.normal(cash_mean, self.params.cash_vol)
                 ])
-                
-                weights = np.array([self.params.w_equity, self.params.w_bonds, 
-                                  self.params.w_real_estate, self.params.w_cash])
+
+                # Get dynamic allocation weights (includes glide path logic)
+                w_eq, w_bonds, w_re, w_cash = self._get_allocation_weights(year_offset)
+                weights = np.array([w_eq, w_bonds, w_re, w_cash])
                 portfolio_return = np.sum(weights * returns)
                 
                 # Apply returns
@@ -473,29 +520,33 @@ class RetirementSimulator:
                 # Store wealth path
                 wealth_paths[sim, year_idx + 1] = portfolio_value
                 
-                # Store median path details
-                if sim == median_sim_idx:
-                    withdrawal_rate = gross_withdrawal / wealth_paths[sim, year_idx] if wealth_paths[sim, year_idx] > 0 else 0
-                    
-                    median_details['years'].append(current_year)
-                    median_details['start_assets'].append(wealth_paths[sim, year_idx])
-                    median_details['base_spending'].append(adjusted_base_spend)
-                    median_details['floor_applied'].append(floor_applied)
-                    median_details['ceiling_applied'].append(ceiling_applied)
-                    median_details['guardrail_action'].append(guardrail_action)
-                    median_details['adjusted_base_spending'].append(final_base_spend)
-                    median_details['college_topup'].append(college_topup)
-                    median_details['one_times'].append(one_times)
-                    median_details['re_income'].append(re_income)
-                    median_details['other_income'].append(other_income)
-                    median_details['taxable_income'].append(max(0, gross_withdrawal - self.params.standard_deduction))
-                    median_details['taxes'].append(taxes)
-                    median_details['net_need'].append(net_need)
-                    median_details['gross_withdrawal'].append(gross_withdrawal)
-                    median_details['growth'].append(portfolio_return * wealth_paths[sim, year_idx])
-                    median_details['inheritance'].append(inheritance)
-                    median_details['end_assets'].append(portfolio_value)
-                    median_details['withdrawal_rate'].append(withdrawal_rate)
+                # Store path details for all simulations
+                withdrawal_rate = gross_withdrawal / wealth_paths[sim, year_idx] if wealth_paths[sim, year_idx] > 0 else 0
+
+                current_details = all_path_details[sim]
+                current_details['years'].append(current_year)
+                current_details['start_assets'].append(wealth_paths[sim, year_idx])
+                current_details['base_spending'].append(adjusted_base_spend)
+                current_details['floor_applied'].append(floor_applied)
+                current_details['ceiling_applied'].append(ceiling_applied)
+                current_details['guardrail_action'].append(guardrail_action)
+                current_details['adjusted_base_spending'].append(final_base_spend)
+                current_details['college_topup'].append(college_topup)
+                current_details['one_times'].append(one_times)
+                current_details['re_income'].append(re_income)
+                current_details['other_income'].append(other_income)
+                current_details['equity_allocation'].append(w_eq)
+                current_details['bonds_allocation'].append(w_bonds)
+                current_details['real_estate_allocation'].append(w_re)
+                current_details['cash_allocation'].append(w_cash)
+                current_details['taxable_income'].append(max(0, gross_withdrawal - self.params.standard_deduction))
+                current_details['taxes'].append(taxes)
+                current_details['net_need'].append(net_need)
+                current_details['gross_withdrawal'].append(gross_withdrawal)
+                current_details['growth'].append(portfolio_return * wealth_paths[sim, year_idx])
+                current_details['inheritance'].append(inheritance)
+                current_details['end_assets'].append(portfolio_value)
+                current_details['withdrawal_rate'].append(withdrawal_rate)
             
             # Store final results
             terminal_wealth[sim] = portfolio_value
@@ -503,14 +554,29 @@ class RetirementSimulator:
         
         # Calculate success rate (non-depletion)
         success_rate = np.mean(years_depleted == -1)
-        
+
+        # Find which simulations correspond to P10, P50, and P90 terminal wealth
+        terminal_wealth_sorted_indices = np.argsort(terminal_wealth)
+
+        # Get simulation indices for percentiles
+        p10_idx = terminal_wealth_sorted_indices[int(0.10 * self.params.num_sims)]
+        p50_idx = terminal_wealth_sorted_indices[int(0.50 * self.params.num_sims)]
+        p90_idx = terminal_wealth_sorted_indices[int(0.90 * self.params.num_sims)]
+
+        # Extract the detailed paths for these percentile simulations
+        median_path_details = all_path_details[p50_idx]
+        p10_path_details = all_path_details[p10_idx]
+        p90_path_details = all_path_details[p90_idx]
+
         return SimulationResults(
             terminal_wealth=terminal_wealth,
             wealth_paths=wealth_paths,
             guardrail_hits=guardrail_hits,
             years_depleted=years_depleted,
             success_rate=success_rate,
-            median_path_details=median_details
+            median_path_details=median_path_details,
+            p10_path_details=p10_path_details,
+            p90_path_details=p90_path_details
         )
 
 

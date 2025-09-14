@@ -1,8 +1,8 @@
 """
-Unit tests for app.py helper functions (state tax and Social Security).
+Unit tests for tax_utils.py helper functions (state tax and Social Security).
 """
 import pytest
-from app import get_state_tax_rates, calculate_social_security_benefit
+from tax_utils import get_state_tax_rates, calculate_social_security_benefit
 
 
 class TestStateTaxRates:

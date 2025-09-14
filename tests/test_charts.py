@@ -8,8 +8,10 @@ from charts import (
     create_terminal_wealth_distribution, create_wealth_percentile_bands,
     create_monte_carlo_paths_sample, create_success_probability_over_time,
     create_cash_flow_waterfall, create_sequence_of_returns_analysis,
-    create_drawdown_analysis
+    create_drawdown_analysis, create_income_sources_stacked_area,
+    create_asset_allocation_evolution
 )
+from simulation import SimulationParams
 
 
 class TestCharts(unittest.TestCase):
@@ -180,6 +182,79 @@ class TestCharts(unittest.TestCase):
         except (ValueError, np.linalg.LinAlgError):
             # Expected for zero-variance data with KDE
             pass
+
+    def test_income_sources_stacked_area(self):
+        """Test income sources stacked area chart creation"""
+        # Mock year-by-year details with income components
+        year_by_year_details = {
+            'years': [2026, 2027, 2028, 2029, 2030],
+            'gross_withdrawal': [80_000, 85_000, 90_000, 95_000, 100_000],
+            'social_security_income': [0, 0, 40_000, 42_000, 44_000],
+            'other_income': [30_000, 35_000, 40_000, 45_000, 50_000],
+            're_income': [60_000, 65_000, 70_000, 75_000, 80_000],
+        }
+
+        fig = create_income_sources_stacked_area(year_by_year_details)
+
+        # Check that figure is created
+        self.assertIsNotNone(fig)
+
+        # Should have income source traces
+        trace_names = [trace.name for trace in fig.data]
+        self.assertTrue(any('Portfolio' in name for name in trace_names))
+        self.assertTrue(any('Social Security' in name for name in trace_names))
+        self.assertTrue(any('Other Income' in name for name in trace_names))
+        self.assertTrue(any('Real Estate' in name for name in trace_names))
+
+        # Test with empty details (should handle gracefully)
+        empty_details = {'years': []}
+        fig_empty = create_income_sources_stacked_area(empty_details)
+        self.assertIsNotNone(fig_empty)
+
+        # Test with currency format parameter
+        fig_nominal = create_income_sources_stacked_area(
+            year_by_year_details, currency_format="nominal"
+        )
+        self.assertIsNotNone(fig_nominal)
+
+    def test_asset_allocation_evolution(self):
+        """Test asset allocation evolution chart creation"""
+        # Create mock simulation params
+        params = SimulationParams(
+            w_equity=0.65, w_bonds=0.25, w_real_estate=0.08, w_cash=0.02,
+            start_capital=2_500_000, horizon_years=10
+        )
+
+        # Mock year-by-year details with portfolio values
+        year_by_year_details = {
+            'years': [2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035],
+            'start_assets': [2_500_000, 2_400_000, 2_300_000, 2_200_000, 2_100_000,
+                           2_000_000, 1_900_000, 1_800_000, 1_700_000, 1_600_000],
+        }
+
+        fig = create_asset_allocation_evolution(params, year_by_year_details)
+
+        # Check that figure is created
+        self.assertIsNotNone(fig)
+
+        # Should have asset class traces
+        trace_names = [trace.name for trace in fig.data]
+        expected_assets = ['Equities', 'Bonds', 'Real Estate', 'Cash']
+        for asset in expected_assets:
+            if getattr(params, f'w_{asset.lower().replace(" ", "_")}', 0) > 0:
+                self.assertTrue(any(asset in name for name in trace_names),
+                              f"{asset} should be in trace names when allocation > 0")
+
+        # Test with empty details (should handle gracefully)
+        empty_details = {'years': []}
+        fig_empty = create_asset_allocation_evolution(params, empty_details)
+        self.assertIsNotNone(fig_empty)
+
+        # Test with currency format parameter
+        fig_nominal = create_asset_allocation_evolution(
+            params, year_by_year_details, currency_format="nominal"
+        )
+        self.assertIsNotNone(fig_nominal)
 
 
 if __name__ == '__main__':
