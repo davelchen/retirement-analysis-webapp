@@ -899,7 +899,9 @@ def step_basics():
                      "• Low CAPE (15-20): Stocks cheap → Higher safe withdrawal rates\n"
                      "• High CAPE (30-40): Stocks expensive → Lower safe withdrawal rates\n\n"
                      "How we use it: Sets your initial withdrawal rate\n"
-                     "Formula: Base 1.75% + 0.5 × (1/CAPE)\n\n"
+                     "Formula: Base 3.5% + 0.5 × (1/CAPE)\n"
+                     "• Low CAPE = Higher bonus (cheap stocks = higher safe rate)\n"
+                     "• High CAPE = Lower bonus (expensive stocks = lower safe rate)\n\n"
                      "Current market: ~28-35 (check Robert Shiller's data)\n"
                      "Historical range: 5 (1920s) to 45+ (dot-com bubble)",
                 key="wiz_cape_now"
@@ -909,7 +911,7 @@ def step_basics():
                 st.session_state.wizard_params['cape_now'] = cape_now
 
             # Calculate CAPE-based spending
-            cape_withdrawal_rate = (1.75 + 0.5 * (1.0 / cape_now)) / 100
+            cape_withdrawal_rate = (3.5 + 0.5 * (1.0 / cape_now)) / 100
             annual_spending = cape_withdrawal_rate * start_capital
             st.session_state.wizard_params['annual_spending'] = annual_spending
 
@@ -918,7 +920,8 @@ def step_basics():
                 f"📊 **CAPE Calculation:**\n"
                 f"• Withdrawal Rate: {cape_withdrawal_rate:.2%}\n"
                 f"• Annual Spending: ${annual_spending:,.0f}\n"
-                f"• Formula: 1.75% + 0.5 × (1/{cape_now})"
+                f"• Formula: 3.5% + 0.5 × (1/{cape_now})\n"
+                f"• Logic: Higher CAPE (expensive markets) = lower bonus rate"
             )
 
         # Calculate and display key metrics
