@@ -2577,13 +2577,14 @@ def step_advanced():
     # Show CAPE-based withdrawal rate calculation
     cape_now = st.session_state.wizard_params.get('cape_now', 28.0)
     start_capital = st.session_state.wizard_params.get('start_capital', 1000000)
-    cape_wr = 1.75 + 0.5 * (1.0 / cape_now)
+    cape_wr = 3.2 + 0.5 * (1.0 / cape_now)
     initial_spending_cape = (cape_wr / 100) * start_capital
 
     st.info(
         f"📊 **CAPE-Based Calculation** (CAPE: {cape_now})\n"
         f"• Withdrawal Rate: {cape_wr:.2f}%\n"
-        f"• Initial Year 1 Spending: ${initial_spending_cape:,.0f}"
+        f"• Initial Year 1 Spending: ${initial_spending_cape:,.0f}\n"
+        f"• Formula: 3.2% + 0.5 × (1/CAPE) - Conservative base rate"
     )
 
 def step_review():
