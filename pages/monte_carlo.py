@@ -407,6 +407,15 @@ def get_current_params() -> SimulationParams:
         (st.session_state.bracket_3_threshold, st.session_state.bracket_3_rate)
     ]
     
+    # Determine spending method parameters
+    initial_base_spending = None
+    fixed_annual_spending = None
+
+    spending_method = getattr(st.session_state, 'spending_method', 'cape')
+    if spending_method == 'fixed':
+        fixed_annual_spending = getattr(st.session_state, 'fixed_annual_spending', None)
+    # For 'cape' method, both remain None (use CAPE calculation)
+
     return SimulationParams(
         start_year=st.session_state.start_year,
         horizon_years=st.session_state.horizon_years,
@@ -428,6 +437,8 @@ def get_current_params() -> SimulationParams:
         cash_mean=st.session_state.cash_mean,
         cash_vol=st.session_state.cash_vol,
         cape_now=st.session_state.cape_now,
+        initial_base_spending=initial_base_spending,
+        fixed_annual_spending=fixed_annual_spending,
         lower_wr=st.session_state.lower_wr,
         upper_wr=st.session_state.upper_wr,
         adjustment_pct=st.session_state.adjustment_pct,
@@ -449,9 +460,12 @@ def get_current_params() -> SimulationParams:
         re_flow_delay_years=st.session_state.re_flow_delay_years,
         inherit_amount=st.session_state.inherit_amount,
         inherit_year=st.session_state.inherit_year,
-        other_income_amount=sum([stream['amount'] for stream in st.session_state.other_income_streams]),
-        other_income_start_year=min([stream['start_year'] for stream in st.session_state.other_income_streams]) if st.session_state.other_income_streams else 2026,
-        other_income_years=max([stream['start_year'] + stream['years'] for stream in st.session_state.other_income_streams]) - min([stream['start_year'] for stream in st.session_state.other_income_streams]) if st.session_state.other_income_streams else 0,
+        # Pass income streams directly instead of flattening
+        income_streams=st.session_state.other_income_streams if st.session_state.other_income_streams else None,
+        # Legacy single stream parameters (for backward compatibility)
+        other_income_amount=0.0,
+        other_income_start_year=2026,
+        other_income_years=0,
         filing_status=st.session_state.filing_status,
         standard_deduction=st.session_state.standard_deduction,
         tax_brackets=tax_brackets,
@@ -605,37 +619,95 @@ def create_sidebar():
     # Spending & Guardrails
     st.sidebar.header("Spending & Guardrails")
     st.session_state.cape_now = st.sidebar.number_input(
-        "CAPE Ratio", 
+        "CAPE Ratio",
         value=st.session_state.cape_now,
         help="📊 **Current market valuation metric**\n\nCyclically Adjusted PE Ratio. Used to set initial withdrawal rate:\nBase Rate = 1.75% + 0.5 × (1/CAPE)\n\n• Low CAPE (~15): Higher safe withdrawal\n• High CAPE (~35+): Lower safe withdrawal"
     )
-    
-    with st.sidebar.expander("Guardrails (Guyton-Klinger)", expanded=False):
-        st.session_state.lower_wr = st.number_input(
-            "Lower Guardrail", value=st.session_state.lower_wr, format="%.3f",
-            help="📉 **Minimum withdrawal rate trigger**\n\nWhen withdrawal rate falls below this, increase spending by adjustment %. Typically 2.8-3.5%."
+
+    # Calculate and display CAPE-based withdrawal rate and initial spending
+    cape_withdrawal_rate = 0.0175 + 0.5 * (1.0 / st.session_state.cape_now)
+
+    # Get start capital correctly (matches get_current_params logic)
+    if st.session_state.use_custom_capital:
+        start_capital = st.session_state.custom_capital
+    else:
+        start_capital = float(st.session_state.capital_preset.replace(',', ''))
+
+    initial_spending_cape = cape_withdrawal_rate * start_capital
+
+    st.sidebar.info(
+        f"**CAPE-Based Calculation:**\n"
+        f"• Withdrawal Rate: {cape_withdrawal_rate:.2%}\n"
+        f"• Initial Year 1 Spending: ${initial_spending_cape:,.0f}"
+    )
+
+    # Spending method choice
+    if 'spending_method' not in st.session_state:
+        st.session_state.spending_method = 'cape'
+    if 'initial_base_spending' not in st.session_state:
+        st.session_state.initial_base_spending = initial_spending_cape
+    if 'fixed_annual_spending' not in st.session_state:
+        st.session_state.fixed_annual_spending = initial_spending_cape
+
+    spending_method = st.sidebar.radio(
+        "Spending Method",
+        options=['cape', 'fixed'],
+        format_func=lambda x: {
+            'cape': "📊 CAPE-based (with guardrails)",
+            'fixed': "🔒 Fixed annual amount"
+        }[x],
+        index=['cape', 'fixed'].index(st.session_state.spending_method if st.session_state.spending_method in ['cape', 'fixed'] else 'cape'),
+        help="Choose spending approach:\n• CAPE: Market-based calculation with guardrails\n• Fixed: Same amount every year (no guardrails)"
+    )
+    st.session_state.spending_method = spending_method
+
+    if spending_method == 'fixed':
+        st.session_state.fixed_annual_spending = st.sidebar.number_input(
+            "Fixed Annual Spending",
+            value=int(st.session_state.fixed_annual_spending),
+            min_value=50_000,
+            max_value=1_000_000,
+            step=5_000,
+            format="%d",
+            help="🔒 **Fixed spending every year**\n\nSame amount every year regardless of portfolio performance. No guardrails or adjustments."
         )
-        st.session_state.upper_wr = st.number_input(
-            "Upper Guardrail", value=st.session_state.upper_wr, format="%.3f", 
-            help="📈 **Maximum withdrawal rate trigger**\n\nWhen withdrawal rate exceeds this, decrease spending by adjustment %. Typically 4.5-6.0%."
-        )
-        st.session_state.adjustment_pct = st.number_input(
-            "Adjustment %", value=st.session_state.adjustment_pct, format="%.2f",
-            help="⚖️ **Spending adjustment magnitude**\n\nPercentage to increase/decrease spending when guardrails trigger. Typically 10-15%."
-        )
-    
-    with st.sidebar.expander("Spending Bounds", expanded=False):
-        st.session_state.spending_floor_real = st.number_input(
-            "Spending Floor ($)", value=st.session_state.spending_floor_real,
-            help="🛡️ **Minimum annual spending**\n\nAbsolute minimum spending level, regardless of portfolio performance. Covers essential expenses."
-        )
-        st.session_state.spending_ceiling_real = st.number_input(
-            "Spending Ceiling ($)", value=st.session_state.spending_ceiling_real,
-            help="🏠 **Maximum annual spending**\n\nCaps spending even when portfolio performs well. Prevents lifestyle inflation and preserves capital."
-        )
-        st.session_state.floor_end_year = st.number_input(
-            "Floor End Year", value=st.session_state.floor_end_year,
-            help="📅 **When floor protection ends**\n\nAfter this year, spending can go below the floor if necessary. Allows flexibility in later years."
+    # For 'cape' method, no additional input needed - use CAPE calculation
+
+    # Only show guardrails and spending bounds for CAPE-based spending
+    if spending_method == 'cape':
+        with st.sidebar.expander("Guardrails (Guyton-Klinger)", expanded=False):
+            st.session_state.lower_wr = st.number_input(
+                "Lower Guardrail", value=st.session_state.lower_wr, format="%.3f",
+                help="📉 **Minimum withdrawal rate trigger**\n\nWhen withdrawal rate falls below this, increase spending by adjustment %. Typically 2.8-3.5%."
+            )
+            st.session_state.upper_wr = st.number_input(
+                "Upper Guardrail", value=st.session_state.upper_wr, format="%.3f",
+                help="📈 **Maximum withdrawal rate trigger**\n\nWhen withdrawal rate exceeds this, decrease spending by adjustment %. Typically 4.5-6.0%."
+            )
+            st.session_state.adjustment_pct = st.number_input(
+                "Adjustment %", value=st.session_state.adjustment_pct, format="%.2f",
+                help="⚖️ **Spending adjustment magnitude**\n\nPercentage to increase/decrease spending when guardrails trigger. Typically 10-15%."
+            )
+
+        with st.sidebar.expander("Spending Bounds", expanded=False):
+            st.session_state.spending_floor_real = st.number_input(
+                "Spending Floor ($)", value=st.session_state.spending_floor_real,
+                help="🛡️ **Minimum annual spending**\n\nAbsolute minimum spending level, regardless of portfolio performance. Covers essential expenses."
+            )
+            st.session_state.spending_ceiling_real = st.number_input(
+                "Spending Ceiling ($)", value=st.session_state.spending_ceiling_real,
+                help="🏠 **Maximum annual spending**\n\nCaps spending even when portfolio performs well. Prevents lifestyle inflation and preserves capital."
+            )
+            st.session_state.floor_end_year = st.number_input(
+                "Floor End Year", value=st.session_state.floor_end_year,
+                help="📅 **When floor protection ends**\n\nAfter this year, spending can go below the floor if necessary. Allows flexibility in later years."
+            )
+    else:
+        # Fixed spending mode - show info about what's disabled
+        st.sidebar.info(
+            "🔒 **Fixed Spending Mode**\n\n"
+            "Guardrails and spending bounds are disabled. "
+            "Your spending will be exactly the same amount every year."
         )
     
     # College Expenses
@@ -1427,15 +1499,19 @@ def display_chat_interface():
     if 'chat_messages' not in st.session_state:
         st.session_state.chat_messages = []
 
-    # Process chat input first (before displaying messages)
+    # 1) Display chat history FIRST (so it appears above the input)
+    for message in st.session_state.chat_messages:
+        with st.chat_message(message['role']):
+            st.write(message['content'])
+
+    # 2) Process chat input LAST (so it stays at bottom) - nothing should render after this
     if prompt := st.chat_input("Ask a question about your retirement analysis..."):
         if prompt.strip():
-            # Add user message to history and display it immediately
+            # Add user message to history
             st.session_state.chat_messages.append({
                 'role': 'user',
                 'content': prompt
             })
-
 
             # Get AI response
             try:
@@ -1454,13 +1530,12 @@ def display_chat_interface():
                         for msg in recent_messages[:-1]  # Exclude the current question
                     ])
 
-                # Show spinner while getting response
-                with st.spinner("Thinking..."):
-                    response, error_type = analyzer.chat_about_analysis(
-                        prompt,
-                        analysis_data,
-                        context if context else None
-                    )
+                # Get AI response (no spinner here as it interferes with chat flow)
+                response, error_type = analyzer.chat_about_analysis(
+                    prompt,
+                    analysis_data,
+                    context if context else None
+                )
 
                 if response:
                     # Add AI response to history
@@ -1468,7 +1543,6 @@ def display_chat_interface():
                         'role': 'assistant',
                         'content': response
                     })
-
                 else:
                     error_msg = APIError.get_user_message(error_type)
                     # Add error message to history
@@ -1484,19 +1558,16 @@ def display_chat_interface():
                     'content': f"Error: {str(e)}"
                 })
 
-            # Trigger a rerun to show the new messages
+            # Trigger rerun so new messages appear in the conversation above
             st.rerun()
 
-    # Display chat history using modern chat interface (after processing input)
-    for message in st.session_state.chat_messages:
-        with st.chat_message(message['role']):
-            st.write(message['content'])
-
-    # Clear chat button
+    # Clear chat button (placed carefully to not interfere with input positioning)
     if len(st.session_state.chat_messages) > 0:
-        if st.button("Clear Chat", key="clear_chat"):
-            st.session_state.chat_messages = []
-            st.rerun()
+        col1, col2, col3 = st.columns([1, 1, 8])  # Small button, right-aligned
+        with col2:
+            if st.button("Clear Chat", key="clear_chat"):
+                st.session_state.chat_messages = []
+                st.rerun()
 
 
 def display_charts():

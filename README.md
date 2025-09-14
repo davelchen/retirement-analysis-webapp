@@ -4,7 +4,7 @@ A comprehensive **Streamlit multipage application** for retirement planning feat
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-Educational-green.svg)
-![Tests](https://img.shields.io/badge/tests-231%20passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-240%20passed-brightgreen.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.49+-red.svg)
 
 ## 🚀 Quick Start
@@ -102,7 +102,7 @@ streamlit run main.py
 ├── charts.py                   # 📈 Plotly visualization builders
 ├── io_utils.py                 # 💾 Data import/export & JSON conversion
 ├── ai_analysis.py              # 🤖 Google Gemini AI integration & usage tracking
-├── tests/                      # 🧪 Comprehensive test suite (230+ tests)
+├── tests/                      # 🧪 Comprehensive test suite (240+ tests)
 │   ├── test_simulation.py      #     Core simulation tests
 │   ├── test_tax.py             #     Tax calculation tests
 │   ├── test_io.py              #     I/O and serialization tests
@@ -130,15 +130,17 @@ streamlit run main.py
 - **Market Regimes**: Baseline, Recession/Recovery, Grind-Lower scenarios
 
 ### 💸 **Spending Framework**
-- **CAPE-Based Initial Rate**: Dynamic withdrawal rate based on market valuation
-- **Guardrails**: Upper/lower thresholds with automatic adjustments
+- **Three Spending Methods**: CAPE-based (with guardrails), Fixed annual (no guardrails), or Manual initial (legacy)
+- **CAPE-Based Initial Rate**: Dynamic withdrawal rate based on market valuation (1.75% + 0.5/CAPE)
+- **Guyton-Klinger Guardrails**: Upper/lower thresholds with automatic adjustments (CAPE & manual modes only)
 - **Spending Bounds**: Floor/ceiling limits with time constraints
 - **College Expenses**: Growing costs (2032-2041) with inflation adjustment
 
 ### 🏠 **Income & Expenses**
-- **Multiple One-Time Expenses**: Add/remove with custom years and amounts
-- **Flexible Income Streams**: Part-time work, consulting, board positions
+- **Multi-Year Expense Streams**: Comprehensive support for overlapping expense periods with accurate timing
+- **Multiple Income Streams**: Part-time work, consulting, board positions with proper start year/duration handling
 - **Real Estate Cash Flow**: Ramp or delayed income patterns
+- **Robust Stream Testing**: 240+ tests ensure accurate timing, edge case handling, and full simulation integration
 - **Inheritance Planning**: Configurable lump sum timing
 
 ### 🧮 **Tax Configuration**
@@ -193,7 +195,7 @@ The application includes a **realistic California family scenario** with:
 
 ## 🧪 Testing & Validation
 
-**230+ comprehensive unit tests** covering all major functionality:
+**240+ comprehensive unit tests** covering all major functionality:
 
 ```bash
 # Run complete test suite
@@ -207,13 +209,14 @@ pytest tests/test_simulation.py -v
 ```
 
 **Test Coverage Areas:**
-- ✅ **Monte Carlo Engine** (50+ tests): Simulation logic, guardrails, regimes, percentile paths
+- ✅ **Monte Carlo Engine** (60+ tests): Simulation logic, guardrails, regimes, percentile paths, income/expense streams
 - ✅ **Tax Calculations** (30+ tests): Progressive brackets, gross-up solver, state taxes
 - ✅ **Data Management** (25+ tests): Parameter serialization, CSV exports, array length validation
 - ✅ **Deterministic Models** (16+ tests): Expected return projections, Social Security integration
 - ✅ **UI Integration** (40+ tests): Parameter conversion, wizard transitions, type safety
 - ✅ **AI Analysis** (25+ tests): Gemini integration, error handling, usage tracking
 - ✅ **App Functions** (15+ tests): State tax rates, Social Security calculations
+- ✅ **Stream Robustness** (10+ tests): Income/expense stream timing, overlaps, edge cases, full simulation integration
 - ✅ **Parameter Validation** (20+ tests): Input validation, edge cases, error handling
 
 ## 🚀 Deployment & Configuration

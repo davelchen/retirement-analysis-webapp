@@ -36,8 +36,10 @@ class SimulationParams:
     cash_mean: float = 0.0
     cash_vol: float = 0.0001
     
-    # CAPE-based initial spending
-    cape_now: float = 38.5
+    # Initial spending configuration
+    cape_now: float = 38.5  # CAPE ratio for calculation
+    initial_base_spending: Optional[float] = None  # Override CAPE-based calculation for year 1 only
+    fixed_annual_spending: Optional[float] = None  # Fixed spending every year (overrides guardrails)
     
     # Guardrails (Guyton-Klinger style)
     lower_wr: float = 0.028
@@ -78,6 +80,9 @@ class SimulationParams:
     other_income_amount: float = 0.0
     other_income_start_year: int = 2026
     other_income_years: int = 0
+
+    # Multiple income streams (replaces single income stream when provided)
+    income_streams: List[Dict[str, Any]] = None
     
     # Tax parameters
     filing_status: str = "MFJ"  # "MFJ" or "Single"
@@ -218,13 +223,29 @@ class RetirementSimulator:
     
     def _get_other_income(self, year: int) -> float:
         """Get other income for given year (real dollars, net of tax)"""
-        if self.params.other_income_years == 0:
-            return 0
+        # Use multiple income streams if provided, otherwise fall back to single stream
+        if self.params.income_streams is not None and len(self.params.income_streams) > 0:
+            total_income = 0.0
+            for stream in self.params.income_streams:
+                stream_start = stream['start_year']
+                stream_years = stream['years']
+                stream_amount = stream['amount']
 
-        year_offset = year - self.params.other_income_start_year
-        if 0 <= year_offset < self.params.other_income_years:
-            return self.params.other_income_amount
-        return 0
+                # Check if this year falls within this stream's duration
+                year_offset = year - stream_start
+                if 0 <= year_offset < stream_years:
+                    total_income += stream_amount
+
+            return total_income
+        else:
+            # Legacy single stream logic
+            if self.params.other_income_years == 0:
+                return 0
+
+            year_offset = year - self.params.other_income_start_year
+            if 0 <= year_offset < self.params.other_income_years:
+                return self.params.other_income_amount
+            return 0
 
     def _get_social_security_income(self, year: int) -> float:
         """Get Social Security income for given year (real dollars, net of tax)"""
@@ -441,8 +462,13 @@ class RetirementSimulator:
             }
             all_path_details.append(path_details)
         
-        # Initial base spending from CAPE rule
-        initial_base_spend = self._get_base_withdrawal_rate() * self.params.start_capital
+        # Initial base spending - priority: fixed > manual > CAPE
+        if self.params.fixed_annual_spending is not None:
+            initial_base_spend = self.params.fixed_annual_spending
+        elif self.params.initial_base_spending is not None:
+            initial_base_spend = self.params.initial_base_spending
+        else:
+            initial_base_spend = self._get_base_withdrawal_rate() * self.params.start_capital
         
         for sim in range(self.params.num_sims):
             portfolio_value = self.params.start_capital
@@ -455,16 +481,29 @@ class RetirementSimulator:
             for year_idx in range(self.params.horizon_years):
                 current_year = self.params.start_year + year_idx
                 
-                # Apply guardrails to base spending
-                adjusted_base_spend, guardrail_action = self._apply_spending_guardrails(
-                    current_base_spend, portfolio_value)
-                if guardrail_action != "none":
-                    sim_guardrail_hits += 1
-                    current_base_spend = adjusted_base_spend
+                # Apply guardrails to base spending (unless fixed spending mode)
+                if self.params.fixed_annual_spending is not None:
+                    # Fixed spending mode - no guardrails, same amount every year
+                    adjusted_base_spend = self.params.fixed_annual_spending
+                    guardrail_action = "none"
+                else:
+                    # Dynamic spending mode - apply guardrails
+                    adjusted_base_spend, guardrail_action = self._apply_spending_guardrails(
+                        current_base_spend, portfolio_value)
+                    if guardrail_action != "none":
+                        sim_guardrail_hits += 1
+                        current_base_spend = adjusted_base_spend
                 
-                # Apply floor and ceiling
-                final_base_spend, floor_applied, ceiling_applied = self._apply_spending_bounds(
-                    adjusted_base_spend, current_year)
+                # Apply floor and ceiling (unless fixed spending mode)
+                if self.params.fixed_annual_spending is not None:
+                    # Fixed spending mode - no bounds applied
+                    final_base_spend = adjusted_base_spend
+                    floor_applied = False
+                    ceiling_applied = False
+                else:
+                    # Dynamic spending mode - apply bounds
+                    final_base_spend, floor_applied, ceiling_applied = self._apply_spending_bounds(
+                        adjusted_base_spend, current_year)
                 
                 # Add other spending components
                 college_topup = self._get_college_topup(current_year)

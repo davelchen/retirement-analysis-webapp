@@ -821,3 +821,427 @@ class TestGetPercentilePathDetails:
         # Values should be ordered and distinct
         assert p10_terminal < p50_terminal < p90_terminal
         assert p10_terminal != p50_terminal != p90_terminal
+
+
+class TestSpendingMethods:
+    """Test the new spending method functionality"""
+
+    def test_cape_based_spending_default(self):
+        """Test default CAPE-based spending calculation"""
+        # Use larger portfolio to get spending above floor
+        params = SimulationParams(start_capital=5_000_000, cape_now=20.0, spending_floor_real=50_000)
+        simulator = RetirementSimulator(params)
+
+        # CAPE-based rate: 1.75% + 0.5 * (1/20) = 1.75% + 2.5% = 4.25%
+        expected_spending = 0.0425 * 5_000_000  # $212,500
+
+        # Check that CAPE calculation works
+        results = simulator.run_simulation()
+
+        # Check that median spending is approximately what we expect
+        median_spending = results.median_path_details['adjusted_base_spending'][0]
+        assert abs(median_spending - expected_spending) < 5000  # Allow 5k tolerance
+
+    def test_manual_spending_override(self):
+        """Test manual spending overrides CAPE calculation"""
+        manual_spending = 180_000  # Above spending floor
+        params = SimulationParams(
+            start_capital=5_000_000,
+            cape_now=20.0,  # This would normally give ~212.5k
+            initial_base_spending=manual_spending,
+            spending_floor_real=50_000  # Lower floor for testing
+        )
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Check that the manual spending is used instead of CAPE
+        median_spending = results.median_path_details['adjusted_base_spending'][0]
+        assert abs(median_spending - manual_spending) < 1000  # Allow small tolerance
+
+    def test_cape_vs_manual_different_results(self):
+        """Test that CAPE-based and manual spending give different results"""
+        # CAPE scenario - use high CAPE to get lower spending
+        cape_params = SimulationParams(
+            start_capital=6_000_000,
+            cape_now=40.0,  # High CAPE = lower spending
+            spending_floor_real=50_000
+        )
+        cape_sim = RetirementSimulator(cape_params)
+        cape_results = cape_sim.run_simulation()
+        cape_spending = cape_results.median_path_details['adjusted_base_spending'][0]
+
+        # Manual scenario with different amount
+        manual_spending = 200_000  # Fixed amount, clearly different
+        manual_params = SimulationParams(
+            start_capital=6_000_000,
+            cape_now=40.0,  # Same CAPE, but will be ignored
+            initial_base_spending=manual_spending,
+            spending_floor_real=50_000
+        )
+        manual_sim = RetirementSimulator(manual_params)
+        manual_results = manual_sim.run_simulation()
+        manual_actual = manual_results.median_path_details['adjusted_base_spending'][0]
+
+        # Should be different results
+        assert abs(cape_spending - manual_actual) > 5000
+        # CAPE with CAPE=40: 1.75% + 0.5*(1/40) = 1.75% + 1.25% = 3% = $180k
+        # Manual should be $200k, so difference should be ~$20k
+
+    def test_fixed_annual_spending_no_guardrails(self):
+        """Test that fixed annual spending stays constant and ignores guardrails"""
+        fixed_amount = 250_000
+        params = SimulationParams(
+            start_capital=3_000_000,
+            fixed_annual_spending=fixed_amount,
+            spending_floor_real=100_000,  # Lower than fixed amount
+            spending_ceiling_real=300_000,  # Higher than fixed amount
+            lower_wr=0.02,  # Very low - would normally trigger guardrail
+            upper_wr=0.15,  # Very high - would normally trigger guardrail
+            num_sims=100  # Small for speed
+        )
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Check that spending stays fixed across all years
+        median_spending = results.median_path_details['adjusted_base_spending']
+
+        # All years should have the same spending amount (fixed)
+        for year_spending in median_spending:
+            assert abs(year_spending - fixed_amount) < 1000, f"Expected {fixed_amount}, got {year_spending}"
+
+        # Check that guardrails were not applied (should be 0 hits)
+        assert results.guardrail_hits.sum() == 0, "Fixed spending should not trigger any guardrail adjustments"
+
+    def test_spending_method_priority_fixed_wins(self):
+        """Test that fixed_annual_spending takes priority over other methods"""
+        fixed_amount = 300_000
+        params = SimulationParams(
+            start_capital=4_000_000,
+            cape_now=25.0,  # Would give different amount
+            initial_base_spending=200_000,  # Would give different amount
+            fixed_annual_spending=fixed_amount,  # This should win
+            spending_floor_real=50_000,
+            num_sims=50
+        )
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Should use fixed amount, not CAPE or manual
+        first_year_spending = results.median_path_details['adjusted_base_spending'][0]
+        assert abs(first_year_spending - fixed_amount) < 1000
+
+
+class TestIncomeStreams:
+    """Test multiple income streams functionality"""
+
+    def test_multiple_income_streams_timing(self):
+        """Test that multiple income streams respect start year and duration"""
+        params = SimulationParams(
+            start_capital=2_000_000,
+            start_year=2026,
+            horizon_years=12,  # 2026-2037
+            num_sims=50,  # Fast test
+            income_streams=[
+                {'amount': 35000, 'start_year': 2026, 'years': 5},  # 2026-2030
+                {'amount': 20000, 'start_year': 2028, 'years': 8}   # 2028-2035
+            ],
+            spending_floor_real=50_000,  # Lower floor for testing
+            random_seed=42  # Reproducible
+        )
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Check income for specific years
+        median_details = results.median_path_details
+        years = median_details['years']
+        other_income = median_details['other_income']
+
+        # Create year->income mapping
+        income_by_year = dict(zip(years, other_income))
+
+        # Test specific years
+        assert income_by_year[2026] == 35000, f"2026 should be $35K, got ${income_by_year[2026]}"
+        assert income_by_year[2027] == 35000, f"2027 should be $35K, got ${income_by_year[2027]}"
+        assert income_by_year[2028] == 55000, f"2028 should be $55K, got ${income_by_year[2028]}"
+        assert income_by_year[2029] == 55000, f"2029 should be $55K, got ${income_by_year[2029]}"
+        assert income_by_year[2030] == 55000, f"2030 should be $55K, got ${income_by_year[2030]}"
+        assert income_by_year[2031] == 20000, f"2031 should be $20K, got ${income_by_year[2031]}"
+        assert income_by_year[2035] == 20000, f"2035 should be $20K, got ${income_by_year[2035]}"
+        assert income_by_year[2036] == 0, f"2036 should be $0, got ${income_by_year[2036]}"
+
+    def test_single_income_stream(self):
+        """Test backward compatibility with single income stream"""
+        params = SimulationParams(
+            start_capital=1_500_000,
+            start_year=2026,
+            horizon_years=8,
+            num_sims=25,
+            income_streams=[
+                {'amount': 45000, 'start_year': 2027, 'years': 3}  # 2027-2029
+            ],
+            spending_floor_real=50_000,
+            random_seed=123
+        )
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Check income timing
+        median_details = results.median_path_details
+        income_by_year = dict(zip(median_details['years'], median_details['other_income']))
+
+        assert income_by_year[2026] == 0
+        assert income_by_year[2027] == 45000
+        assert income_by_year[2028] == 45000
+        assert income_by_year[2029] == 45000
+        assert income_by_year[2030] == 0
+
+    def test_overlapping_income_streams(self):
+        """Test complex overlapping income streams"""
+        params = SimulationParams(
+            start_capital=3_000_000,
+            start_year=2026,
+            horizon_years=8,
+            num_sims=25,
+            income_streams=[
+                {'amount': 40000, 'start_year': 2026, 'years': 4},  # 2026-2029
+                {'amount': 25000, 'start_year': 2027, 'years': 3},  # 2027-2029
+                {'amount': 30000, 'start_year': 2029, 'years': 5}   # 2029-2033
+            ],
+            spending_floor_real=50_000,
+            random_seed=456
+        )
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Check overlapping periods
+        median_details = results.median_path_details
+        income_by_year = dict(zip(median_details['years'], median_details['other_income']))
+
+        assert income_by_year[2026] == 40000  # Stream 1 only
+        assert income_by_year[2027] == 65000  # Stream 1 + 2
+        assert income_by_year[2028] == 65000  # Stream 1 + 2
+        assert income_by_year[2029] == 95000  # Stream 1 + 2 + 3
+        assert income_by_year[2030] == 30000  # Stream 3 only
+        assert income_by_year[2033] == 30000  # Stream 3 only
+
+    def test_legacy_single_stream_compatibility(self):
+        """Test that legacy single stream parameters still work"""
+        params = SimulationParams(
+            start_capital=1_000_000,
+            start_year=2026,
+            horizon_years=6,
+            num_sims=25,
+            # Legacy single stream (no income_streams parameter)
+            other_income_amount=30000,
+            other_income_start_year=2028,
+            other_income_years=3,  # 2028-2030
+            spending_floor_real=50_000,
+            random_seed=789
+        )
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Check legacy behavior
+        median_details = results.median_path_details
+        income_by_year = dict(zip(median_details['years'], median_details['other_income']))
+
+        assert income_by_year[2027] == 0
+        assert income_by_year[2028] == 30000
+        assert income_by_year[2029] == 30000
+        assert income_by_year[2030] == 30000
+        assert income_by_year[2031] == 0
+
+
+class TestExpenseStreams:
+    """Test multiple expense streams functionality"""
+
+    def test_multiple_expense_streams_timing(self):
+        """Test that multiple expense streams respect start year and duration"""
+        params = SimulationParams(
+            start_capital=3_000_000,
+            start_year=2026,
+            horizon_years=12,  # 2026-2037
+            num_sims=50,  # Fast test
+            expense_streams=[
+                {'amount': 80000, 'start_year': 2028, 'years': 4, 'description': 'College 1'},  # 2028-2031
+                {'amount': 50000, 'start_year': 2030, 'years': 3, 'description': 'Home renovation'},  # 2030-2032
+                {'amount': 200000, 'start_year': 2035, 'years': 1, 'description': 'One-time expense'}  # 2035 only
+            ],
+            spending_floor_real=100_000,
+            fixed_annual_spending=250_000,  # Use fixed to make testing predictable
+            random_seed=42  # Reproducible
+        )
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Check expense timing in simulation results
+        median_details = results.median_path_details
+        years = median_details['years']
+        one_times = median_details['one_times']
+
+        # Create year->expense mapping
+        expenses_by_year = dict(zip(years, one_times))
+
+        # Test specific years
+        assert expenses_by_year[2026] == 0, f"2026 should be $0, got ${expenses_by_year[2026]}"
+        assert expenses_by_year[2027] == 0, f"2027 should be $0, got ${expenses_by_year[2027]}"
+        assert expenses_by_year[2028] == 80000, f"2028 should be $80K, got ${expenses_by_year[2028]}"
+        assert expenses_by_year[2029] == 80000, f"2029 should be $80K, got ${expenses_by_year[2029]}"
+        assert expenses_by_year[2030] == 130000, f"2030 should be $130K (80+50), got ${expenses_by_year[2030]}"
+        assert expenses_by_year[2031] == 130000, f"2031 should be $130K (80+50), got ${expenses_by_year[2031]}"
+        assert expenses_by_year[2032] == 50000, f"2032 should be $50K, got ${expenses_by_year[2032]}"
+        assert expenses_by_year[2033] == 0, f"2033 should be $0, got ${expenses_by_year[2033]}"
+        assert expenses_by_year[2034] == 0, f"2034 should be $0, got ${expenses_by_year[2034]}"
+        assert expenses_by_year[2035] == 200000, f"2035 should be $200K, got ${expenses_by_year[2035]}"
+        assert expenses_by_year[2036] == 0, f"2036 should be $0, got ${expenses_by_year[2036]}"
+
+    def test_expense_stream_impact_on_withdrawals(self):
+        """Test that expense streams increase portfolio withdrawals correctly"""
+        # Base case - no expenses
+        base_params = SimulationParams(
+            start_capital=2_000_000,
+            start_year=2026,
+            horizon_years=5,
+            num_sims=25,
+            fixed_annual_spending=150_000,  # Fixed spending for predictable results
+            spending_floor_real=50_000,
+            random_seed=123
+        )
+        base_sim = RetirementSimulator(base_params)
+        base_results = base_sim.run_simulation()
+        base_withdrawal_2028 = base_results.median_path_details['gross_withdrawal'][2]  # 2028
+
+        # With expense case
+        expense_params = SimulationParams(
+            start_capital=2_000_000,
+            start_year=2026,
+            horizon_years=5,
+            num_sims=25,
+            fixed_annual_spending=150_000,
+            expense_streams=[
+                {'amount': 100_000, 'start_year': 2028, 'years': 1}  # 2028 only
+            ],
+            spending_floor_real=50_000,
+            random_seed=123  # Same seed for comparison
+        )
+        expense_sim = RetirementSimulator(expense_params)
+        expense_results = expense_sim.run_simulation()
+        expense_withdrawal_2028 = expense_results.median_path_details['gross_withdrawal'][2]  # 2028
+
+        # The withdrawal in 2028 should be higher due to the expense + taxes on the additional withdrawal
+        withdrawal_difference = expense_withdrawal_2028 - base_withdrawal_2028
+        # Should be between $100K (just the expense) and ~$130K (expense + taxes)
+        assert 100_000 <= withdrawal_difference <= 130_000, f"Expected $100K-$130K difference, got ${withdrawal_difference:,.0f}"
+
+        # Verify the expense amount is correct in the results
+        expense_one_times = expense_results.median_path_details['one_times']
+        assert expense_one_times[2] == 100_000, f"Expected $100K expense in 2028, got ${expense_one_times[2]:,.0f}"
+
+        # 2027 and 2029 should be similar between the two scenarios
+        base_withdrawal_2027 = base_results.median_path_details['gross_withdrawal'][1]
+        expense_withdrawal_2027 = expense_results.median_path_details['gross_withdrawal'][1]
+        assert abs(base_withdrawal_2027 - expense_withdrawal_2027) < 5_000
+
+    def test_overlapping_expense_streams(self):
+        """Test complex overlapping expense streams"""
+        params = SimulationParams(
+            start_capital=4_000_000,
+            start_year=2026,
+            horizon_years=10,
+            num_sims=25,
+            expense_streams=[
+                {'amount': 60000, 'start_year': 2026, 'years': 3, 'description': 'Expense A'},  # 2026-2028
+                {'amount': 40000, 'start_year': 2027, 'years': 4, 'description': 'Expense B'},  # 2027-2030
+                {'amount': 80000, 'start_year': 2029, 'years': 2, 'description': 'Expense C'},  # 2029-2030
+                {'amount': 120000, 'start_year': 2032, 'years': 1, 'description': 'Expense D'}  # 2032 only
+            ],
+            spending_floor_real=50_000,
+            random_seed=456
+        )
+        simulator = RetirementSimulator(params)
+
+        # Test the expense calculation method directly
+        assert simulator._get_onetime_expense(2025) == 0
+        assert simulator._get_onetime_expense(2026) == 60000  # A only
+        assert simulator._get_onetime_expense(2027) == 100000  # A + B
+        assert simulator._get_onetime_expense(2028) == 100000  # A + B
+        assert simulator._get_onetime_expense(2029) == 120000  # B + C
+        assert simulator._get_onetime_expense(2030) == 120000  # B + C
+        assert simulator._get_onetime_expense(2031) == 0
+        assert simulator._get_onetime_expense(2032) == 120000  # D only
+        assert simulator._get_onetime_expense(2033) == 0
+
+    def test_edge_cases_expense_streams(self):
+        """Test edge cases for expense streams"""
+        # Test empty expense streams
+        params_empty = SimulationParams(expense_streams=[])
+        simulator_empty = RetirementSimulator(params_empty)
+        assert simulator_empty._get_onetime_expense(2030) == 0
+
+        # Test None expense streams
+        params_none = SimulationParams(expense_streams=None)
+        simulator_none = RetirementSimulator(params_none)
+        assert simulator_none._get_onetime_expense(2030) == 0
+
+        # Test zero amount expense
+        params_zero = SimulationParams(
+            expense_streams=[{'amount': 0, 'start_year': 2030, 'years': 1}]
+        )
+        simulator_zero = RetirementSimulator(params_zero)
+        assert simulator_zero._get_onetime_expense(2030) == 0
+
+        # Test missing keys (should default gracefully)
+        params_missing = SimulationParams(
+            expense_streams=[{'start_year': 2030, 'years': 1}]  # Missing 'amount'
+        )
+        simulator_missing = RetirementSimulator(params_missing)
+        assert simulator_missing._get_onetime_expense(2030) == 0
+
+    def test_single_year_expenses_legacy_format(self):
+        """Test backward compatibility with legacy single-year expense format"""
+        # Some expense streams might use 'year' instead of 'start_year' + 'years'
+        params = SimulationParams(
+            expense_streams=[
+                {'amount': 50000, 'year': 2030, 'description': 'Legacy format'},  # Should work as 1-year expense
+                {'amount': 75000, 'start_year': 2032, 'years': 1, 'description': 'New format'}
+            ]
+        )
+        simulator = RetirementSimulator(params)
+
+        # Both should work as single-year expenses
+        assert simulator._get_onetime_expense(2030) == 50000
+        assert simulator._get_onetime_expense(2031) == 0
+        assert simulator._get_onetime_expense(2032) == 75000
+        assert simulator._get_onetime_expense(2033) == 0
+
+    def test_expense_streams_full_simulation(self):
+        """Test expense streams in a full simulation to ensure integration works"""
+        params = SimulationParams(
+            start_capital=5_000_000,
+            start_year=2026,
+            horizon_years=8,
+            num_sims=10,  # Small for speed
+            expense_streams=[
+                {'amount': 100000, 'start_year': 2028, 'years': 2, 'description': 'Major expense'}  # 2028-2029
+            ],
+            spending_floor_real=100_000,
+            fixed_annual_spending=200_000,
+            random_seed=789
+        )
+
+        # Should not raise any exceptions
+        simulator = RetirementSimulator(params)
+        results = simulator.run_simulation()
+
+        # Verify results structure includes expense data
+        assert 'one_times' in results.median_path_details
+        assert len(results.median_path_details['one_times']) == params.horizon_years
+
+        # Verify expense amounts in results
+        median_details = results.median_path_details
+        expenses_by_year = dict(zip(median_details['years'], median_details['one_times']))
+
+        assert expenses_by_year[2027] == 0
+        assert expenses_by_year[2028] == 100000
+        assert expenses_by_year[2029] == 100000
+        assert expenses_by_year[2030] == 0

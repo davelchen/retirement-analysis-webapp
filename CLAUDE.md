@@ -24,7 +24,7 @@ This is a comprehensive Streamlit web application for retirement planning using 
 - `ai_analysis.py`: Google Gemini AI integration with usage tracking and privacy controls
 
 ### Testing Strategy
-Comprehensive test suite with 230+ unit tests covering:
+Comprehensive test suite with 240+ unit tests covering:
 - Monte Carlo simulation logic and edge cases
 - Tax calculations and gross-up solver accuracy
 - State tax integration and rate calculations
@@ -36,6 +36,8 @@ Comprehensive test suite with 230+ unit tests covering:
 - Market regime scenarios and custom configurations
 - College and real estate flow toggle functionality
 - Spousal Social Security integration
+- Income and expense stream timing, overlaps, and edge cases
+- Multiple spending methods (CAPE-based, fixed annual)
 
 ## Implementation Notes
 
@@ -82,11 +84,18 @@ Vectorized operations for performance:
 - Medium sims (≤10K): 2-5 seconds (recommended)
 - Large sims (≤50K): 10-30 seconds
 
+### Spending Methods
+Three distinct spending approaches with appropriate guardrail integration:
+- **CAPE-based**: Uses market valuation to set initial withdrawal rate (1.75% + 0.5/CAPE) with Guyton-Klinger guardrails
+- **Fixed annual**: Constant spending amount every year, no guardrail adjustments
+- **Manual initial**: User-defined starting withdrawal rate with Guyton-Klinger guardrails (legacy option)
+
 ### Guyton-Klinger Guardrails
-Dynamic spending adjustments based on withdrawal rate bands:
+Dynamic spending adjustments based on withdrawal rate bands (when enabled):
 - Upper guardrail: Increase spending when WR drops below threshold
 - Lower guardrail: Decrease spending when WR exceeds threshold
 - Configurable adjustment percentages and spending bounds
+- Only applies to CAPE-based and manual initial spending methods
 
 ## UI Features
 
@@ -94,10 +103,11 @@ Dynamic spending adjustments based on withdrawal rate bands:
 Every parameter includes detailed explanations with usage guidance and examples.
 
 ### Dynamic Management
-- **Multi-year expense streams**: Annual amount, start year, and duration (like income streams)
-- **Income streams**: Multiple sources with start year, duration, and amounts
-- **Overlapping support**: Multiple expense periods with accurate yearly totals
-- **Aggregation logic**: UI data structures converted to simulation parameters
+- **Multi-year expense streams**: Annual amount, start year, and duration with comprehensive testing for timing accuracy
+- **Income streams**: Multiple sources with start year, duration, and amounts supporting overlapping periods
+- **Robust stream handling**: Proper timing calculations with edge case protection and full simulation integration
+- **Aggregation logic**: UI data structures converted to simulation parameters with comprehensive test coverage
+- **Spending method selection**: CAPE-based (with guardrails) vs fixed annual (no guardrails) with conditional UI display
 
 ### Tax and Social Security UI
 - **State tax dropdown**: 10 common states with automatic bracket updates
@@ -244,13 +254,48 @@ This project demonstrates comprehensive financial modeling with professional sof
 - **Never commit sensitive data**: Even in test files or examples
 
 ### Testing & Documentation Maintenance
-- **Test Count Tracking**: With 230+ tests, documentation gets outdated quickly - regularly update README badges and counts
+- **Test Count Tracking**: With 240+ tests, documentation gets outdated quickly - regularly update README badges and counts
 - **Regression Tests**: For critical bugs like CSV exports, add both failure reproduction tests and fix validation tests
 - **Module Growth**: As test suites grow, update specific module test counts in documentation
 
 ## Recent Major Updates
 
-### CSV Export Array Length Mismatch Fix (Latest - September 2025)
+### Spending Method Enhancement & Stream Robustness (Latest - September 2025)
+**Major UI improvements and comprehensive testing for income/expense streams:**
+
+**Spending Method Alignment:**
+- **Problem**: Wizard offered "fixed annual spending" but Monte Carlo only had "manual initial spending", creating user confusion
+- **Solution**: Implemented three distinct spending methods with proper UI alignment between wizard and Monte Carlo pages
+- **Methods**: CAPE-based (with guardrails), Fixed annual (no guardrails), Manual initial (legacy, with guardrails)
+- **Conditional UI**: Guardrails and spending bounds automatically hidden when fixed spending is selected
+- **CAPE Display**: Added real-time CAPE calculation display showing withdrawal rate and dollar amounts in both wizard and Monte Carlo
+
+**Income Stream Bug Fix & Enhancement:**
+- **Problem**: Multiple income streams incorrectly flattened into single stream (e.g., $35K/5yrs + $20K/8yrs showing as $55K from earliest to latest year)
+- **Root Cause**: `_get_other_income()` method wasn't properly handling overlapping stream timing
+- **Solution**: Implemented proper multiple stream support with accurate year-by-year calculations
+- **Code Fix**: `simulation.py` - `for stream in self.params.income_streams:` loop with proper `year_offset` and duration checks
+- **UI Integration**: Fixed `pages/monte_carlo.py` parameter mapping to use `st.session_state.other_income_streams`
+
+**Comprehensive Stream Testing:**
+- **Income Streams**: Added 4 comprehensive unit tests in `TestIncomeStreams` class covering timing, overlaps, edge cases, and full simulation
+- **Expense Streams**: Added 6 comprehensive unit tests in `TestExpenseStreams` class covering multiple streams, portfolio impact, and legacy format compatibility
+- **Test Coverage**: All 10 new tests pass, bringing total test count to 240+
+- **Edge Cases**: Tests handle empty streams, missing keys, zero amounts, and tax implications
+
+**Chat Interface Improvement:**
+- **Problem**: Chat input appeared above conversation instead of below (ChatGPT-like behavior expected)
+- **Solution**: Reordered rendering logic to display chat history first, then chat input last
+- **Pattern**: Process input → Display history → Show input field for natural conversation flow
+- **Result**: Proper chat app UX with input at bottom
+
+**Technical Implementation:**
+- **Stream Architecture**: Both income and expense streams use identical `start_year` + `years` duration model
+- **Parameter Persistence**: All stream configurations properly serialized/deserialized in JSON format
+- **UI Consistency**: Wizard and Monte Carlo interfaces now perfectly aligned for spending method selection
+- **Test Strategy**: Added both unit tests for logic validation and integration tests for full simulation behavior
+
+### CSV Export Array Length Mismatch Fix (September 2025)
 **Critical bug fix for CSV export functionality that was causing application crashes:**
 
 **Fixed CSV Export Pandas DataFrame Error:**

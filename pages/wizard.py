@@ -488,15 +488,56 @@ def step_basics():
     with col2:
         st.markdown("### 💸 Annual Spending Needs")
 
-        annual_spending = st.number_input(
-            "Annual Spending in Retirement",
-            min_value=0,
-            value=int(st.session_state.wizard_params.get('annual_spending', 100_000)),
-            step=5000,
-            format="%d",
-            help="How much you plan to spend each year in retirement (today's dollars)"
+        # Initialize spending method if not set
+        if 'spending_method' not in st.session_state.wizard_params:
+            st.session_state.wizard_params['spending_method'] = 'fixed'
+        if 'cape_now' not in st.session_state.wizard_params:
+            st.session_state.wizard_params['cape_now'] = 28.0
+
+        spending_method = st.radio(
+            "How to set spending?",
+            options=['fixed', 'cape'],
+            format_func=lambda x: "💰 Fixed amount every year" if x == 'fixed' else "📊 CAPE-based with guardrails",
+            index=0 if st.session_state.wizard_params['spending_method'] == 'fixed' else 1,
+            help="Choose your approach:\n• Fixed: Same amount every year (no adjustments)\n• CAPE: Market-based calculation with dynamic guardrails"
         )
-        st.session_state.wizard_params['annual_spending'] = annual_spending
+        st.session_state.wizard_params['spending_method'] = spending_method
+
+        if spending_method == 'fixed':
+            annual_spending = st.number_input(
+                "Annual Spending in Retirement",
+                min_value=0,
+                value=int(st.session_state.wizard_params.get('annual_spending', 100_000)),
+                step=5000,
+                format="%d",
+                help="How much you plan to spend each year in retirement (today's dollars)"
+            )
+            st.session_state.wizard_params['annual_spending'] = annual_spending
+        else:
+            # CAPE-based spending
+            st.markdown("**🔧 CAPE Parameters**")
+            cape_now = st.slider(
+                "Current CAPE Ratio",
+                min_value=15.0,
+                max_value=45.0,
+                value=st.session_state.wizard_params.get('cape_now', 28.0),
+                step=1.0,
+                help="📊 Market valuation - higher CAPE = lower safe spending"
+            )
+            st.session_state.wizard_params['cape_now'] = cape_now
+
+            # Calculate CAPE-based spending
+            cape_withdrawal_rate = (1.75 + 0.5 * (1.0 / cape_now)) / 100
+            annual_spending = cape_withdrawal_rate * start_capital
+            st.session_state.wizard_params['annual_spending'] = annual_spending
+
+            # Show the calculation
+            st.info(
+                f"📊 **CAPE Calculation:**\n"
+                f"• Withdrawal Rate: {cape_withdrawal_rate:.2%}\n"
+                f"• Annual Spending: ${annual_spending:,.0f}\n"
+                f"• Formula: 1.75% + 0.5 × (1/{cape_now})"
+            )
 
         # Calculate and display key metrics
         st.markdown("### 📊 Key Metrics")
@@ -2005,8 +2046,16 @@ def step_advanced():
         st.metric("Market Scenario", market_scenarios[market_regime].split(':')[0])
 
     # Show CAPE-based withdrawal rate calculation
-    cape_wr = 1.75 + 0.5 * (1.0 / st.session_state.wizard_params.get('cape_now', 28.0))
-    st.info(f"📊 **CAPE-Based Initial Withdrawal Rate**: {cape_wr:.2f}% (based on CAPE ratio of {st.session_state.wizard_params.get('cape_now', 28.0)})")
+    cape_now = st.session_state.wizard_params.get('cape_now', 28.0)
+    start_capital = st.session_state.wizard_params.get('start_capital', 1000000)
+    cape_wr = 1.75 + 0.5 * (1.0 / cape_now)
+    initial_spending_cape = (cape_wr / 100) * start_capital
+
+    st.info(
+        f"📊 **CAPE-Based Calculation** (CAPE: {cape_now})\n"
+        f"• Withdrawal Rate: {cape_wr:.2f}%\n"
+        f"• Initial Year 1 Spending: ${initial_spending_cape:,.0f}"
+    )
 
 def step_review():
     """Final review and JSON generation step"""

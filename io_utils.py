@@ -156,6 +156,7 @@ def convert_wizard_to_json(wizard_params: Dict[str, Any]) -> Dict[str, Any]:
         "basic_params": {
             "start_capital": wizard_params.get('start_capital', 2_500_000),
             "annual_spending": wizard_params.get('annual_spending', 120_000),
+            "spending_method": wizard_params.get('spending_method', 'cape'),
             "retirement_age": wizard_params.get('retirement_age', 65),
             "start_year": wizard_params.get('start_year', 2025),
             "horizon_years": wizard_params.get('horizon_years', 50)
@@ -314,6 +315,10 @@ def convert_wizard_json_to_simulation_params(wizard_json: Dict[str, Any]) -> Dic
         'regime': simulation.get('market_regime', 'baseline'),
         'cape_now': simulation.get('cape_now', 28.0),
         'random_seed': simulation.get('random_seed', None),
+
+        # Initial spending configuration
+        'initial_base_spending': _get_wizard_initial_spending(basic),
+        'fixed_annual_spending': _get_wizard_fixed_spending(basic),
 
         # Handle cash flows - convert from wizard structure
         'expense_streams': _convert_wizard_expense_streams(cash_flows.get('expense_streams', [])),
@@ -896,3 +901,22 @@ def _convert_flat_to_wizard_params(flat_params: Dict[str, Any]) -> Dict[str, Any
     })
 
     return wizard_params
+
+
+def _get_wizard_initial_spending(basic: Dict[str, Any]) -> Optional[float]:
+    """Extract initial spending from wizard basic parameters based on spending method"""
+    spending_method = basic.get('spending_method', 'cape')
+    if spending_method == 'fixed':
+        return basic.get('annual_spending', None)
+    else:
+        # For CAPE-based or manual, return None to use CAPE calculation
+        return None
+
+
+def _get_wizard_fixed_spending(basic: Dict[str, Any]) -> Optional[float]:
+    """Extract fixed annual spending from wizard basic parameters"""
+    spending_method = basic.get('spending_method', 'cape')
+    if spending_method == 'fixed':
+        return basic.get('annual_spending', None)
+    else:
+        return None
