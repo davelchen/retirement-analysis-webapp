@@ -99,8 +99,24 @@ Dynamic spending adjustments based on withdrawal rate bands (when enabled):
 
 ## UI Features
 
-### Rich Tooltips
+### Intelligent Parameter Validation
+**Age-Aware Planning Guidance:**
+- Retirement age is used for smart horizon validation (not in simulation calculations)
+- Young retirees (< 50 years) get warnings for short horizons (< 40 years) with specific recommendations
+- All users get longevity risk alerts if planning horizon doesn't reach age 80
+- Late retirees (65+) can plan any horizon length without restrictive warnings
+- Positive confirmation for excellent planning (horizons reaching age 90+)
+- Real-time feedback as users adjust retirement age and horizon parameters
+
+### Rich Tooltips & Smart Validation
 Every parameter includes detailed explanations with usage guidance and examples.
+
+**Age-Aware Horizon Validation:**
+- **Young Retirement Warning**: Users retiring before age 50 with horizons under 40 years receive recommendations to extend planning
+- **Longevity Risk Alerts**: Plans ending before age 80 trigger longevity risk information regardless of retirement age
+- **Positive Reinforcement**: Plans extending to age 90+ receive confirmation of excellent longevity planning
+- **Flexible for Late Retirees**: Users retiring at 65+ can choose any horizon without complaints about "too long"
+- **Smart Logic**: retirement_age + horizon_years = end_age analysis provides contextual, helpful guidance
 
 ### Dynamic Management
 - **Multi-year expense streams**: Annual amount, start year, and duration with comprehensive testing for timing accuracy
@@ -616,6 +632,14 @@ Complete transformation to unified Streamlit multipage application:
 - All existing tests continue to pass, ensuring no regressions
 
 **Result**: Eliminated all parameter persistence issues - no more values resetting after navigation, no more missing parameters in JSON files, no more widget state race conditions. The system now provides reliable, comprehensive parameter management that "just works" for all user inputs.
+
+**Age-Aware Horizon Validation (Latest Enhancement):**
+- **Intelligent Retirement Planning Guidance**: Retirement age now provides smart validation for planning horizon
+- **Young Retiree Warnings**: Users under 50 with short horizons (< 40 years) receive targeted recommendations
+- **Longevity Risk Alerts**: All users warned if planning doesn't extend to age 80, regardless of retirement age
+- **Flexible for Late Retirees**: Users retiring at 65+ can choose any horizon without restrictive warnings
+- **Positive Reinforcement**: Excellent planning (reaching age 90+) receives confirmation messages
+- **Real-Time Feedback**: Validation updates immediately as users adjust age and horizon parameters
 
 ### State Tax Integration & Social Security Modeling (September 2025)
 - **State Tax Dropdown**: 10 common states with automatic combined federal+state tax bracket updates

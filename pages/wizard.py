@@ -822,6 +822,35 @@ def step_basics():
             st.session_state.wizard_params['horizon_years'] = horizon_years
             print(f"DEBUG [horizon_years widget]: Synced change to wizard_params: {horizon_years}")
 
+        # Age-aware horizon validation
+        current_retirement_age = st.session_state.wizard_params.get('retirement_age', 65)
+        current_horizon = st.session_state.wizard_params.get('horizon_years', 50)
+        end_age = current_retirement_age + current_horizon
+
+        # Warning for young people with short horizons
+        if current_retirement_age < 50 and current_horizon < 40:
+            st.warning(
+                f"⚠️ **Planning Horizon Recommendation**: You're planning to retire at {current_retirement_age} "
+                f"with only {current_horizon} years of retirement funding. Consider extending your horizon to 40-50 years "
+                f"to account for longer life expectancy and inflation over time."
+            )
+
+        # Longevity risk warning for everyone if end age < 80
+        elif end_age < 80:
+            years_to_80 = 80 - current_retirement_age
+            st.info(
+                f"💡 **Longevity Planning**: Your current plan covers until age {end_age}. "
+                f"Consider extending to at least {years_to_80} years (age 80) to manage longevity risk, "
+                f"as many people live well beyond their initial retirement planning assumptions."
+            )
+
+        # Positive confirmation for good planning
+        elif end_age >= 90:
+            st.success(
+                f"✅ **Excellent Longevity Planning**: Your {current_horizon}-year horizon covers until age {end_age}, "
+                f"providing strong protection against longevity risk."
+            )
+
     with col2:
         st.markdown("### 💸 Annual Spending Needs")
 

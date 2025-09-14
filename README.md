@@ -36,9 +36,10 @@ streamlit run main.py
 ### 🧙‍♂️ **Interactive Setup Wizard**
 - **Step-by-step guidance** through all retirement planning parameters
 - **Comprehensive parameter persistence** - all 47+ widgets maintain values through navigation
+- **Age-aware validation** - intelligent horizon recommendations based on retirement age
 - **Beautiful visualizations** - pie charts, scatter plots, timelines
 - **Educational content** with parameter descriptions and best practices
-- **Real-time feedback** showing impact of your choices
+- **Real-time feedback** showing impact of your choices with smart warnings
 - **JSON save/load functionality** with complete parameter preservation
 - **Seamless handoff** to Monte Carlo analysis with one click
 
@@ -125,6 +126,7 @@ streamlit run main.py
 - **Enhanced JSON Saving**: Both wizard and simulation save functions capture ALL parameters
 - **Robust Parameter Loading**: Support for both wizard nested JSON and simulation flat JSON formats
 - **Round-Trip Reliability**: Complete parameter lifecycle testing ensures data integrity
+- **Age-Aware Validation**: Smart horizon recommendations based on retirement age and longevity planning
 - **No More Partial Fixes**: Systematic architectural solution prevents future persistence issues
 
 ### 🎨 **User Experience Improvements**
