@@ -226,8 +226,8 @@ class RetirementAnalyzer:
                 'college_enabled': getattr(params, 'college_enabled', True),
                 'college_base_amount': getattr(params, 'college_base_amount', 75000),
                 'real_estate_enabled': getattr(params, 'real_estate_enabled', True),
-                'expense_streams': getattr(params, 'expense_streams', []),
-                'income_streams': getattr(params, 'income_streams', [])
+                'expense_streams': getattr(params, 'expense_streams', []) or [],
+                'income_streams': getattr(params, 'income_streams', []) or []
             }
         }
 

@@ -240,6 +240,67 @@ This project demonstrates comprehensive financial modeling with professional sof
 - **Session State Variables**: UI widgets must use exact session state variable names - `st.session_state.other_income_streams` vs `st.session_state.income_streams` mismatch causes parameter loading failures
 - **Multipage Architecture**: Direct session state sharing between pages is more reliable than JSON file handoffs for parameter transfer
 
+### Streamlit Widget Persistence Patterns (CRITICAL)
+**Hard-learned lessons from debugging widget "jumping" and double-click issues:**
+
+**The CORRECT Widget Persistence Pattern:**
+```python
+# ✅ CORRECT: Complete persistence pattern
+widget_value = st.slider(
+    "Label",
+    value=st.session_state.wizard_params.get('param_key', default),  # Persistent source of truth
+    key="widget_key"  # Widget identity for Streamlit
+)
+
+# Immediate sync with change check (prevents unnecessary writes)
+if widget_value != st.session_state.wizard_params.get('param_key'):
+    st.session_state.wizard_params['param_key'] = widget_value
+```
+
+**Why This Pattern Works:**
+- **`wizard_params` survives navigation** - doesn't get cleared between wizard steps
+- **Widget key may get cleared** - Streamlit clears unused widget keys between reruns
+- **Value parameter restores widget** - when key is cleared, value parameter restores from persistent storage
+- **Immediate sync keeps both aligned** - prevents circular references and conflicts
+- **Change check prevents unnecessary writes** - performance optimization
+
+**PROBLEMATIC Patterns That Cause Issues:**
+```python
+# ❌ WRONG: Widget key only (gets cleared between steps)
+widget = st.slider("Label", key="widget_key")
+
+# ❌ WRONG: Value parameter only (no persistence when user changes widget)
+widget = st.slider("Label", value=some_default)
+
+# ❌ WRONG: Conflicting value + key (Streamlit resets key to match value)
+widget = st.slider("Label", value=43, key="widget_key")  # If widget_key=48, resets to 43!
+
+# ❌ WRONG: Delayed sync only (widget shows stale values during navigation)
+sync_widget_values_to_wizard_params()  # Called at end of script only
+```
+
+**Key Streamlit Behaviors Discovered:**
+1. **Widget Keys vs Value Parameter Conflict**: When a widget has both `value` and `key` parameters and they have different values, Streamlit resets the widget key to match the value parameter
+2. **Widget Key Lifecycle**: Widget keys are cleared when widgets don't render (e.g., during step navigation)
+3. **One-Time Operations**: Use session state flags for operations that should only run once: `if not st.session_state.get('operation_done', False)`
+4. **Rerun Behavior**: Streamlit reruns the entire script on every interaction - all code runs again
+
+**Implementation Status:**
+- **✅ COMPLETE**: 6 critical widgets use full correct pattern (horizon_years, equity_reduction, start_capital, retirement_age, start_year, num_simulations)
+- **⚠️ PARTIAL**: 30+ widgets have value + key but missing change sync (functional but not optimized)
+- **✅ TESTED**: 9 comprehensive unit tests in `tests/test_widget_persistence.py` validate patterns and document lessons
+
+**Stream Safety Pattern (AI Analysis Fix):**
+```python
+# ✅ CORRECT: Always ensure streams are lists, never None
+income_streams = st.session_state.other_income_streams if st.session_state.other_income_streams else []
+
+# ✅ CORRECT: Defensive programming in data processing
+streams = getattr(params, 'income_streams', []) or []  # Handle None gracefully
+```
+
+**This section documents the most critical Streamlit learnings to prevent future widget persistence bugs.**
+
 ### Pandas DataFrame Array Length Issues
 - **Root Cause**: Monte Carlo `wealth_paths` includes t=0 (initial wealth) plus all horizon years, creating N+1 data points
 - **Symptom**: `ValueError: All arrays must be of the same length` when years array (N elements) doesn't match data arrays (N+1 elements)
@@ -254,13 +315,42 @@ This project demonstrates comprehensive financial modeling with professional sof
 - **Never commit sensitive data**: Even in test files or examples
 
 ### Testing & Documentation Maintenance
-- **Test Count Tracking**: With 240+ tests, documentation gets outdated quickly - regularly update README badges and counts
+- **Test Count Tracking**: With 255+ tests, documentation gets outdated quickly - regularly update README badges and counts
 - **Regression Tests**: For critical bugs like CSV exports, add both failure reproduction tests and fix validation tests
 - **Module Growth**: As test suites grow, update specific module test counts in documentation
+- **Widget Persistence Tests**: Added comprehensive unit tests in `tests/test_widget_persistence.py` to validate and document Streamlit widget behavior patterns
 
 ## Recent Major Updates
 
-### Spending Method Enhancement & Stream Robustness (Latest - September 2025)
+### Streamlit Widget Persistence & AI Analysis Fixes (Latest - September 2025)
+**Critical fixes for widget behavior and AI analysis robustness:**
+
+**Widget Persistence Pattern Implementation:**
+- **Problem**: Streamlit widgets exhibiting "jumping" behavior requiring double-clicks, values resetting after navigation between wizard steps
+- **Root Cause**: Conflicting widget `value` and `key` parameters, plus widget keys being cleared during step navigation
+- **Solution**: Implemented complete persistence pattern with persistent storage (`wizard_params`) as source of truth, widget keys for identity, and immediate sync with change detection
+- **Pattern**: `value=wizard_params.get()` + `key="widget_key"` + `if widget_value != wizard_params.get(): wizard_params[key] = widget_value`
+- **Fixed Widgets**: 6 critical widgets now use complete pattern (horizon_years, equity_reduction, start_capital, retirement_age, start_year, num_simulations)
+
+**AI Analysis NoneType Error Fix:**
+- **Problem**: `"object of type 'NoneType' has no len()"` error when running AI analysis
+- **Root Cause**: `income_streams` parameter being passed as `None` instead of empty list `[]` when no streams exist
+- **Solution**: Updated `pages/monte_carlo.py` line 464: `income_streams=st.session_state.other_income_streams if st.session_state.other_income_streams else []`
+- **Safety**: Added defensive programming in `ai_analysis.py`: `getattr(params, 'income_streams', []) or []`
+
+**Comprehensive Testing & Documentation:**
+- **New Test Suite**: Added `tests/test_widget_persistence.py` with 9 comprehensive unit tests validating widget patterns
+- **Test Categories**: Parameter persistence, AI analysis robustness, widget pattern validation, Streamlit behavior documentation
+- **Documentation**: Added critical Streamlit Widget Persistence Patterns section to CLAUDE.md with examples and anti-patterns
+- **Test Results**: All 255 tests passing (1 complex UI test skipped), no regressions from widget fixes
+
+**Key Streamlit Discoveries Documented:**
+1. **Value/Key Conflict**: Streamlit resets widget keys when value parameter conflicts with existing key value
+2. **Widget Key Lifecycle**: Keys cleared when widgets don't render (navigation), restored by value parameter
+3. **One-Time Operation Pattern**: Use session state flags to prevent repeated execution on reruns
+4. **Stream Safety**: Always ensure list parameters are `[]` not `None` to prevent length operation errors
+
+### Spending Method Enhancement & Stream Robustness (September 2025)
 **Major UI improvements and comprehensive testing for income/expense streams:**
 
 **Spending Method Alignment:**

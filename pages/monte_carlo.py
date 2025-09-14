@@ -461,7 +461,7 @@ def get_current_params() -> SimulationParams:
         inherit_amount=st.session_state.inherit_amount,
         inherit_year=st.session_state.inherit_year,
         # Pass income streams directly instead of flattening
-        income_streams=st.session_state.other_income_streams if st.session_state.other_income_streams else None,
+        income_streams=st.session_state.other_income_streams if st.session_state.other_income_streams else [],
         # Legacy single stream parameters (for backward compatibility)
         other_income_amount=0.0,
         other_income_start_year=2026,
@@ -583,37 +583,45 @@ def create_sidebar():
     with st.sidebar.expander("Expected Returns", expanded=False):
         st.session_state.equity_mean = st.number_input(
             "Equity Mean", value=st.session_state.equity_mean, format="%.3f",
-            help="📊 **Expected annual real return for stocks**\n\nHistorical average ~7% nominal, ~5% real after inflation. Accounts for long-term economic growth and corporate earnings."
+            help="📊 **Expected annual real return for stocks**\n\nHistorical average ~7% nominal, ~5% real after inflation. Accounts for long-term economic growth and corporate earnings.",
+            key="mc_equity_mean"
         )
         st.session_state.bonds_mean = st.number_input(
             "Bonds Mean", value=st.session_state.bonds_mean, format="%.3f",
-            help="🏛️ **Expected annual real return for bonds**\n\nDepends on interest rates and credit quality. Currently low due to low yields. Historical real returns ~1-3%."
+            help="🏛️ **Expected annual real return for bonds**\n\nDepends on interest rates and credit quality. Currently low due to low yields. Historical real returns ~1-3%.",
+            key="mc_bonds_mean"
         )
         st.session_state.real_estate_mean = st.number_input(
             "Real Estate Mean", value=st.session_state.real_estate_mean, format="%.3f",
-            help="🏘️ **Expected annual real return for REITs**\n\nCombines rental income and property appreciation. Historically ~2-4% real returns with inflation protection."
+            help="🏘️ **Expected annual real return for REITs**\n\nCombines rental income and property appreciation. Historically ~2-4% real returns with inflation protection.",
+            key="mc_real_estate_mean"
         )
         st.session_state.cash_mean = st.number_input(
             "Cash Mean", value=st.session_state.cash_mean, format="%.3f",
-            help="💵 **Expected annual real return for cash**\n\nTypically near zero real return (matches inflation). Provides stability and liquidity, not growth."
+            help="💵 **Expected annual real return for cash**\n\nTypically near zero real return (matches inflation). Provides stability and liquidity, not growth.",
+            key="mc_cash_mean"
         )
     
     with st.sidebar.expander("Volatilities", expanded=False):
         st.session_state.equity_vol = st.number_input(
             "Equity Volatility", value=st.session_state.equity_vol, format="%.3f",
-            help="📈 **Annual return volatility (standard deviation)**\n\nMeasures year-to-year variability. Equity: ~15-20%. Higher volatility = wider range of possible outcomes."
+            help="📈 **Annual return volatility (standard deviation)**\n\nMeasures year-to-year variability. Equity: ~15-20%. Higher volatility = wider range of possible outcomes.",
+            key="mc_equity_vol"
         )
         st.session_state.bonds_vol = st.number_input(
             "Bonds Volatility", value=st.session_state.bonds_vol, format="%.3f",
-            help="🏛️ **Bond return volatility**\n\nTypically 5-10%. Lower than stocks but still varies with interest rate changes and credit events."
+            help="🏛️ **Bond return volatility**\n\nTypically 5-10%. Lower than stocks but still varies with interest rate changes and credit events.",
+            key="mc_bonds_vol"
         )
         st.session_state.real_estate_vol = st.number_input(
             "Real Estate Volatility", value=st.session_state.real_estate_vol, format="%.3f",
-            help="🏘️ **REIT return volatility**\n\nTypically 8-15%. Less volatile than stocks, more than bonds. Affected by interest rates and property cycles."
+            help="🏘️ **REIT return volatility**\n\nTypically 8-15%. Less volatile than stocks, more than bonds. Affected by interest rates and property cycles.",
+            key="mc_real_estate_vol"
         )
         st.session_state.cash_vol = st.number_input(
             "Cash Volatility", value=st.session_state.cash_vol, format="%.4f",
-            help="💵 **Cash return volatility**\n\nNear zero (~0.01%). Cash provides stability with minimal fluctuation in returns."
+            help="💵 **Cash return volatility**\n\nNear zero (~0.01%). Cash provides stability with minimal fluctuation in returns.",
+            key="mc_cash_vol"
         )
     
     # Spending & Guardrails
@@ -678,29 +686,35 @@ def create_sidebar():
         with st.sidebar.expander("Guardrails (Guyton-Klinger)", expanded=False):
             st.session_state.lower_wr = st.number_input(
                 "Lower Guardrail", value=st.session_state.lower_wr, format="%.3f",
-                help="📉 **Minimum withdrawal rate trigger**\n\nWhen withdrawal rate falls below this, increase spending by adjustment %. Typically 2.8-3.5%."
+                help="📉 **Minimum withdrawal rate trigger**\n\nWhen withdrawal rate falls below this, increase spending by adjustment %. Typically 2.8-3.5%.",
+                key="mc_lower_wr"
             )
             st.session_state.upper_wr = st.number_input(
                 "Upper Guardrail", value=st.session_state.upper_wr, format="%.3f",
-                help="📈 **Maximum withdrawal rate trigger**\n\nWhen withdrawal rate exceeds this, decrease spending by adjustment %. Typically 4.5-6.0%."
+                help="📈 **Maximum withdrawal rate trigger**\n\nWhen withdrawal rate exceeds this, decrease spending by adjustment %. Typically 4.5-6.0%.",
+                key="mc_upper_wr"
             )
             st.session_state.adjustment_pct = st.number_input(
                 "Adjustment %", value=st.session_state.adjustment_pct, format="%.2f",
-                help="⚖️ **Spending adjustment magnitude**\n\nPercentage to increase/decrease spending when guardrails trigger. Typically 10-15%."
+                help="⚖️ **Spending adjustment magnitude**\n\nPercentage to increase/decrease spending when guardrails trigger. Typically 10-15%.",
+                key="mc_adjustment_pct"
             )
 
         with st.sidebar.expander("Spending Bounds", expanded=False):
             st.session_state.spending_floor_real = st.number_input(
                 "Spending Floor ($)", value=st.session_state.spending_floor_real,
-                help="🛡️ **Minimum annual spending**\n\nAbsolute minimum spending level, regardless of portfolio performance. Covers essential expenses."
+                help="🛡️ **Minimum annual spending**\n\nAbsolute minimum spending level, regardless of portfolio performance. Covers essential expenses.",
+                key="mc_spending_floor_real"
             )
             st.session_state.spending_ceiling_real = st.number_input(
                 "Spending Ceiling ($)", value=st.session_state.spending_ceiling_real,
-                help="🏠 **Maximum annual spending**\n\nCaps spending even when portfolio performs well. Prevents lifestyle inflation and preserves capital."
+                help="🏠 **Maximum annual spending**\n\nCaps spending even when portfolio performs well. Prevents lifestyle inflation and preserves capital.",
+                key="mc_spending_ceiling_real"
             )
             st.session_state.floor_end_year = st.number_input(
                 "Floor End Year", value=st.session_state.floor_end_year,
-                help="📅 **When floor protection ends**\n\nAfter this year, spending can go below the floor if necessary. Allows flexibility in later years."
+                help="📅 **When floor protection ends**\n\nAfter this year, spending can go below the floor if necessary. Allows flexibility in later years.",
+                key="mc_floor_end_year"
             )
     else:
         # Fixed spending mode - show info about what's disabled
@@ -715,42 +729,47 @@ def create_sidebar():
     st.session_state.college_enabled = st.sidebar.checkbox(
         "Enable College Expenses",
         value=st.session_state.college_enabled,
-        help="🎓 **Toggle college expense system**\n\nEnable or disable all college-related expenses. When disabled, no college costs are included in the simulation."
+        help="🎓 **Toggle college expense system**\n\nEnable or disable all college-related expenses. When disabled, no college costs are included in the simulation.",
+        key="mc_college_enabled"
     )
     
     if st.session_state.college_enabled:
         with st.sidebar.expander("College Configuration", expanded=True):
             st.session_state.college_base_amount = st.number_input(
-                "Base Annual Amount ($)", 
+                "Base Annual Amount ($)",
                 value=st.session_state.college_base_amount,
                 min_value=0,
-                help="💰 **Annual college cost in first year**\n\nBase amount for college expenses in the starting year. This grows each year by the growth rate. Typical range: $50K-$150K per year."
+                help="💰 **Annual college cost in first year**\n\nBase amount for college expenses in the starting year. This grows each year by the growth rate. Typical range: $50K-$150K per year.",
+                key="mc_college_base_amount"
             )
             
             col1, col2 = st.columns(2)
             with col1:
                 st.session_state.college_start_year = st.number_input(
-                    "Start Year", 
+                    "Start Year",
                     value=st.session_state.college_start_year,
                     min_value=st.session_state.start_year,
                     max_value=st.session_state.start_year + st.session_state.horizon_years,
-                    help="📅 **When college expenses begin**\n\nFirst year college costs are incurred. Typically when your first child starts college."
+                    help="📅 **When college expenses begin**\n\nFirst year college costs are incurred. Typically when your first child starts college.",
+                    key="mc_college_start_year"
                 )
             
             with col2:
                 st.session_state.college_end_year = st.number_input(
-                    "End Year", 
+                    "End Year",
                     value=st.session_state.college_end_year,
                     min_value=st.session_state.college_start_year,
                     max_value=st.session_state.start_year + st.session_state.horizon_years,
-                    help="📅 **When college expenses end**\n\nLast year of college costs. Typically when your last child graduates college."
+                    help="📅 **When college expenses end**\n\nLast year of college costs. Typically when your last child graduates college.",
+                    key="mc_college_end_year"
                 )
             
             st.session_state.college_growth_real = st.number_input(
-                "Annual Growth Rate", 
-                value=st.session_state.college_growth_real, 
+                "Annual Growth Rate",
+                value=st.session_state.college_growth_real,
                 format="%.3f",
-                help="📈 **Real growth in college costs**\n\nAnnual growth rate above inflation. College costs historically grow 1-3% above inflation due to education cost increases."
+                help="📈 **Real growth in college costs**\n\nAnnual growth rate above inflation. College costs historically grow 1-3% above inflation due to education cost increases.",
+                key="mc_college_growth_real"
             )
             
             # Show calculated summary
@@ -812,30 +831,34 @@ def create_sidebar():
     st.session_state.re_flow_enabled = st.sidebar.checkbox(
         "Enable Real Estate Income",
         value=st.session_state.re_flow_enabled,
-        help="🏘️ **Toggle real estate income stream**\n\nEnable or disable all real estate income. When disabled, no RE cash flow is included in the simulation."
+        help="🏘️ **Toggle real estate income stream**\n\nEnable or disable all real estate income. When disabled, no RE cash flow is included in the simulation.",
+        key="mc_re_flow_enabled"
     )
     
     if st.session_state.re_flow_enabled:
         st.session_state.re_flow_preset = st.sidebar.selectbox(
-            "Cash Flow Pattern", 
-            options=['ramp', 'delayed', 'custom'], 
+            "Cash Flow Pattern",
+            options=['ramp', 'delayed', 'custom'],
             index=['ramp', 'delayed', 'custom'].index(st.session_state.re_flow_preset),
-            help="🏘️ **Real estate income pattern**\n\n**Ramp**: $50K (Yr1) → $60K (Yr2) → $75K (Yr3+)\n**Delayed**: 5-year delay, then ramp up\n**Custom**: Configure your own amounts and timing"
+            help="🏘️ **Real estate income pattern**\n\n**Ramp**: $50K (Yr1) → $60K (Yr2) → $75K (Yr3+)\n**Delayed**: 5-year delay, then ramp up\n**Custom**: Configure your own amounts and timing",
+            key="mc_re_flow_preset"
         )
         
         if st.session_state.re_flow_preset == 'custom':
             with st.sidebar.expander("Custom RE Configuration", expanded=True):
                 st.session_state.re_flow_start_year = st.number_input(
-                    "Start Year", 
+                    "Start Year",
                     value=st.session_state.re_flow_start_year,
                     min_value=st.session_state.start_year,
                     max_value=st.session_state.start_year + st.session_state.horizon_years,
-                    help="📅 **When real estate income begins**\n\nFirst year you expect to receive real estate cash flow."
+                    help="📅 **When real estate income begins**\n\nFirst year you expect to receive real estate cash flow.",
+                    key="mc_re_flow_start_year"
                 )
                 
                 st.session_state.re_flow_delay_years = st.number_input(
-                    "Additional Delay (Years)", 
+                    "Additional Delay (Years)",
                     value=st.session_state.re_flow_delay_years,
+                    key="mc_re_flow_delay_years",
                     min_value=0,
                     max_value=20,
                     help="⏳ **Extra years to delay beyond start year**\n\nAdditional delay before income begins. Total start = Start Year + Delay Years."
@@ -844,25 +867,28 @@ def create_sidebar():
                 col1, col2 = st.columns(2)
                 with col1:
                     st.session_state.re_flow_year1_amount = st.number_input(
-                        "Year 1 Amount ($)", 
+                        "Year 1 Amount ($)",
                         value=st.session_state.re_flow_year1_amount,
                         min_value=0,
-                        help="💰 **First year income amount**\n\nReal estate cash flow in the first year of operation."
+                        help="💰 **First year income amount**\n\nReal estate cash flow in the first year of operation.",
+                        key="mc_re_flow_year1_amount"
                     )
                     
                     st.session_state.re_flow_year2_amount = st.number_input(
-                        "Year 2 Amount ($)", 
+                        "Year 2 Amount ($)",
                         value=st.session_state.re_flow_year2_amount,
                         min_value=0,
-                        help="💰 **Second year income amount**\n\nReal estate cash flow in the second year. Often higher than year 1 due to rent increases or stabilization."
+                        help="💰 **Second year income amount**\n\nReal estate cash flow in the second year. Often higher than year 1 due to rent increases or stabilization.",
+                        key="mc_re_flow_year2_amount"
                     )
                 
                 with col2:
                     st.session_state.re_flow_steady_amount = st.number_input(
-                        "Ongoing Amount ($)", 
+                        "Ongoing Amount ($)",
                         value=st.session_state.re_flow_steady_amount,
                         min_value=0,
-                        help="💰 **Steady-state annual income**\n\nOngoing real estate cash flow from year 3 onwards. The stabilized annual amount."
+                        help="💰 **Steady-state annual income**\n\nOngoing real estate cash flow from year 3 onwards. The stabilized annual amount.",
+                        key="mc_re_flow_steady_amount"
                     )
                 
                 # Show calculated summary
@@ -976,33 +1002,40 @@ def create_sidebar():
     st.session_state.standard_deduction = st.sidebar.number_input(
         "Standard Deduction ($)",
         value=st.session_state.standard_deduction,
-        help="📋 **Standard tax deduction**\n\nAmount deducted from gross income before calculating taxes. 2024: MFJ ~$29K, Single ~$15K."
+        help="📋 **Standard tax deduction**\n\nAmount deducted from gross income before calculating taxes. 2024: MFJ ~$29K, Single ~$15K.",
+        key="mc_standard_deduction"
     )
     
     with st.sidebar.expander("Tax Brackets", expanded=False):
         st.session_state.bracket_1_threshold = st.number_input(
             "Bracket 1 Start ($)", value=st.session_state.bracket_1_threshold,
-            help="💰 **First tax bracket threshold**\n\nTaxable income level where this rate starts. Usually $0."
+            help="💰 **First tax bracket threshold**\n\nTaxable income level where this rate starts. Usually $0.",
+            key="mc_bracket_1_threshold"
         )
         st.session_state.bracket_1_rate = st.number_input(
             "Bracket 1 Rate", value=st.session_state.bracket_1_rate, format="%.2f",
-            help="📊 **Tax rate for first bracket**\n\nDecimal format (0.10 = 10%). Typically 10-12%."
+            help="📊 **Tax rate for first bracket**\n\nDecimal format (0.10 = 10%). Typically 10-12%.",
+            key="mc_bracket_1_rate"
         )
         st.session_state.bracket_2_threshold = st.number_input(
             "Bracket 2 Start ($)", value=st.session_state.bracket_2_threshold,
-            help="💰 **Second tax bracket threshold**\n\nIncome level where higher rate begins. MFJ ~$94K, Single ~$47K."
+            help="💰 **Second tax bracket threshold**\n\nIncome level where higher rate begins. MFJ ~$94K, Single ~$47K.",
+            key="mc_bracket_2_threshold"
         )
         st.session_state.bracket_2_rate = st.number_input(
             "Bracket 2 Rate", value=st.session_state.bracket_2_rate, format="%.2f",
-            help="📊 **Tax rate for second bracket**\n\nTypically 22-24%. Applied to income above threshold."
+            help="📊 **Tax rate for second bracket**\n\nTypically 22-24%. Applied to income above threshold.",
+            key="mc_bracket_2_rate"
         )
         st.session_state.bracket_3_threshold = st.number_input(
             "Bracket 3 Start ($)", value=st.session_state.bracket_3_threshold,
-            help="💰 **Third tax bracket threshold**\n\nHigh-income bracket start. MFJ ~$201K, Single ~$100K."
+            help="💰 **Third tax bracket threshold**\n\nHigh-income bracket start. MFJ ~$201K, Single ~$100K.",
+            key="mc_bracket_3_threshold"
         )
         st.session_state.bracket_3_rate = st.number_input(
             "Bracket 3 Rate", value=st.session_state.bracket_3_rate, format="%.2f",
-            help="📊 **Tax rate for third bracket**\n\nHighest rate modeled. Typically 24-32%."
+            help="📊 **Tax rate for third bracket**\n\nHighest rate modeled. Typically 24-32%.",
+            key="mc_bracket_3_rate"
         )
 
     # Social Security Parameters
@@ -1103,7 +1136,7 @@ def create_sidebar():
                      'inflation_shock', 'long_bear', 'tech_bubble', 'custom']
     
     st.session_state.regime = st.sidebar.selectbox(
-        "Market Scenario", 
+        "Market Scenario",
         options=regime_options,
         index=regime_options.index(st.session_state.regime) if st.session_state.regime in regime_options else 0,
         help="📈 **Market scenario to model**\n\n"
@@ -1114,7 +1147,8 @@ def create_sidebar():
              "**Inflation Shock**: High inflation years 3-7\n"
              "**Long Bear**: Extended bear market years 5-15\n"
              "**Tech Bubble**: Boom then bust pattern\n"
-             "**Custom**: Configure your own shock timing"
+             "**Custom**: Configure your own shock timing",
+        key="mc_regime"
     )
     
     # Show regime descriptions
@@ -1136,48 +1170,53 @@ def create_sidebar():
     if st.session_state.regime == 'custom':
         with st.sidebar.expander("Custom Regime Configuration", expanded=True):
             st.session_state.custom_equity_shock_year = st.number_input(
-                "Shock Start Year (0-based)", 
+                "Shock Start Year (0-based)",
                 value=st.session_state.custom_equity_shock_year,
                 min_value=0,
                 max_value=st.session_state.horizon_years - 1,
-                help="📅 **When the market shock begins**\n\n0 = First year of retirement, 1 = Second year, etc."
+                help="📅 **When the market shock begins**\n\n0 = First year of retirement, 1 = Second year, etc.",
+                key="mc_custom_equity_shock_year"
             )
             
             st.session_state.custom_equity_shock_return = st.number_input(
-                "Equity Return During Shock", 
+                "Equity Return During Shock",
                 value=st.session_state.custom_equity_shock_return,
                 min_value=-0.50,
                 max_value=0.20,
                 format="%.2f",
-                help="📈 **Equity return during shock period**\n\nDecimal format (-0.20 = -20%). Typical range: -50% to +20%."
+                help="📈 **Equity return during shock period**\n\nDecimal format (-0.20 = -20%). Typical range: -50% to +20%.",
+                key="mc_custom_equity_shock_return"
             )
             
             col1, col2 = st.columns(2)
             with col1:
                 st.session_state.custom_shock_duration = st.number_input(
-                    "Shock Duration (Years)", 
+                    "Shock Duration (Years)",
                     value=st.session_state.custom_shock_duration,
                     min_value=1,
                     max_value=10,
-                    help="⏱️ **How many years the shock lasts**\n\nTypically 1-3 years for recessions, longer for structural changes."
+                    help="⏱️ **How many years the shock lasts**\n\nTypically 1-3 years for recessions, longer for structural changes.",
+                    key="mc_custom_shock_duration"
                 )
             
             with col2:
                 st.session_state.custom_recovery_years = st.number_input(
-                    "Recovery Period (Years)", 
+                    "Recovery Period (Years)",
                     value=st.session_state.custom_recovery_years,
                     min_value=0,
                     max_value=10,
-                    help="🔄 **Years of below-normal returns after shock**\n\nRecovery period with reduced returns before returning to normal."
+                    help="🔄 **Years of below-normal returns after shock**\n\nRecovery period with reduced returns before returning to normal.",
+                    key="mc_custom_recovery_years"
                 )
             
             st.session_state.custom_recovery_equity_return = st.number_input(
-                "Equity Return During Recovery", 
+                "Equity Return During Recovery",
                 value=st.session_state.custom_recovery_equity_return,
                 min_value=-0.10,
                 max_value=0.15,
                 format="%.2f",
-                help="📈 **Equity return during recovery period**\n\nTypically positive but below normal expected returns."
+                help="📈 **Equity return during recovery period**\n\nTypically positive but below normal expected returns.",
+                key="mc_custom_recovery_equity_return"
             )
             
             # Show custom pattern summary
@@ -1294,7 +1333,8 @@ def display_ai_analysis_section():
         enable_ai = st.checkbox(
             "Enable AI-powered analysis and recommendations",
             value=st.session_state.get('enable_ai_analysis', False),
-            help="Get personalized recommendations based on your simulation results using Google Gemini AI"
+            help="Get personalized recommendations based on your simulation results using Google Gemini AI",
+            key="mc_enable_ai"
         )
         # Save enable_ai setting if it changed
         if enable_ai != st.session_state.get('enable_ai_analysis', False):
@@ -1330,7 +1370,8 @@ def display_ai_analysis_section():
                 "🔐 Gemini API Key (Optional)",
                 value=st.session_state.get('gemini_api_key', ''),
                 type="password",
-                help="Paste your free API key from https://aistudio.google.com/app/apikey"
+                help="Paste your free API key from https://aistudio.google.com/app/apikey",
+                key="mc_gemini_api_key"
             )
 
             # Model selection dropdown
@@ -1343,7 +1384,8 @@ def display_ai_analysis_section():
                 options=model_options,
                 index=model_options.index(st.session_state.get('gemini_model', 'gemini-2.5-pro')),
                 format_func=lambda x: available_models[x],
-                help="Choose the Gemini model for analysis. Flash models are faster, Pro models are more capable."
+                help="Choose the Gemini model for analysis. Flash models are faster, Pro models are more capable.",
+                key="mc_selected_model"
             )
 
             # Save selections if they changed
@@ -1678,7 +1720,8 @@ def display_year_by_year_table():
             "Select Path:",
             options=["P10 (Pessimistic)", "P50 (Median)", "P90 (Optimistic)"],
             index=1,  # Default to P50 (Median)
-            help="Choose which simulation path to display:\n• P10: 10th percentile (pessimistic case)\n• P50: 50th percentile (median case)\n• P90: 90th percentile (optimistic case)"
+            help="Choose which simulation path to display:\n• P10: 10th percentile (pessimistic case)\n• P50: 50th percentile (median case)\n• P90: 90th percentile (optimistic case)",
+            key="mc_path_selection"
         )
         print(f"DEBUG [Year-by-year]: Path selection changed to: {path_selection}")
 

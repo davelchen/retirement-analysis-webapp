@@ -4,7 +4,7 @@ A comprehensive **Streamlit multipage application** for retirement planning feat
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-Educational-green.svg)
-![Tests](https://img.shields.io/badge/tests-240%20passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-255%20passed-brightgreen.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.49+-red.svg)
 
 ## 🚀 Quick Start
@@ -195,7 +195,7 @@ The application includes a **realistic California family scenario** with:
 
 ## 🧪 Testing & Validation
 
-**240+ comprehensive unit tests** covering all major functionality:
+**255+ comprehensive unit tests** covering all major functionality:
 
 ```bash
 # Run complete test suite
@@ -217,6 +217,7 @@ pytest tests/test_simulation.py -v
 - ✅ **AI Analysis** (25+ tests): Gemini integration, error handling, usage tracking
 - ✅ **App Functions** (15+ tests): State tax rates, Social Security calculations
 - ✅ **Stream Robustness** (10+ tests): Income/expense stream timing, overlaps, edge cases, full simulation integration
+- ✅ **Widget Persistence** (9+ tests): Streamlit widget behavior patterns, session state management, persistence validation
 - ✅ **Parameter Validation** (20+ tests): Input validation, edge cases, error handling
 
 ## 🚀 Deployment & Configuration

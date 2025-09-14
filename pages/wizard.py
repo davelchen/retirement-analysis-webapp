@@ -23,12 +23,19 @@ import os
 
 def load_ui_config():
     """Load UI configuration like API keys from ui_config.json"""
+    print(f"DEBUG [load_ui_config]: CALLED - Starting UI config load from ui_config.json")
     try:
         if os.path.exists('ui_config.json'):
+            print(f"DEBUG [load_ui_config]: File exists, reading...")
             with open('ui_config.json', 'r') as f:
                 config = json.load(f)
-            print(f"DEBUG [load_ui_config]: Successfully loaded - enable_ai: {config.get('enable_ai_analysis', 'MISSING')}, api_key: {config.get('gemini_api_key', 'MISSING')[:10] if config.get('gemini_api_key') else 'EMPTY'}...")
+            print(f"DEBUG [load_ui_config]: Successfully loaded config with {len(config)} keys")
+            print(f"DEBUG [load_ui_config]: enable_ai_analysis = {config.get('enable_ai_analysis', 'MISSING')}")
+            print(f"DEBUG [load_ui_config]: gemini_api_key = {config.get('gemini_api_key', 'MISSING')[:10] if config.get('gemini_api_key') else 'EMPTY'}...")
+            print(f"DEBUG [load_ui_config]: gemini_model = {config.get('gemini_model', 'MISSING')}")
             return config
+        else:
+            print(f"DEBUG [load_ui_config]: ui_config.json does not exist")
     except Exception as e:
         print(f"ERROR [load_ui_config]: Could not load ui_config.json: {e}")
     default_config = {}
@@ -37,11 +44,15 @@ def load_ui_config():
 
 def save_ui_config(config):
     """Save UI configuration to ui_config.json"""
-    print(f"DEBUG [save_ui_config]: Saving config - enable_ai: {config.get('enable_ai_analysis', 'MISSING')}, api_key: {config.get('gemini_api_key', 'MISSING')[:10] if config.get('gemini_api_key') else 'EMPTY'}...")
+    print(f"DEBUG [save_ui_config]: CALLED - Starting UI config save to ui_config.json")
+    print(f"DEBUG [save_ui_config]: Config to save has {len(config)} keys:")
+    print(f"DEBUG [save_ui_config]: enable_ai_analysis = {config.get('enable_ai_analysis', 'MISSING')}")
+    print(f"DEBUG [save_ui_config]: gemini_api_key = {config.get('gemini_api_key', 'MISSING')[:10] if config.get('gemini_api_key') else 'EMPTY'}...")
+    print(f"DEBUG [save_ui_config]: gemini_model = {config.get('gemini_model', 'MISSING')}")
     try:
         with open('ui_config.json', 'w') as f:
             json.dump(config, f, indent=2)
-        print(f"DEBUG [save_ui_config]: Successfully saved to file")
+        print(f"DEBUG [save_ui_config]: Successfully saved to ui_config.json")
     except Exception as e:
         print(f"ERROR [save_ui_config]: Could not save ui_config.json: {e}")
 
@@ -62,21 +73,131 @@ WIZARD_STEPS = [
 
 def safe_get_wizard_param(key, default_value):
     """Safely get a wizard parameter with default fallback"""
+    # Initialize state should have already run, but double-check
     if 'wizard_params' not in st.session_state:
-        initialize_wizard_state()
+        print(f"WARNING [safe_get_wizard_param]: wizard_params missing, returning default for {key}")
+        return default_value
     return st.session_state.wizard_params.get(key, default_value)
 
+def sync_widget_values_to_wizard_params():
+    """Collect current widget values from their keys and update wizard_params"""
+    if 'wizard_params' not in st.session_state:
+        print(f"DEBUG [sync_widget_values]: wizard_params missing, creating empty one")
+        st.session_state.wizard_params = {}
+
+    print(f"DEBUG [sync_widget_values]: Starting sync, checking key widgets...")
+
+    # Check if key widget values exist in session state
+    key_widgets = ['wiz_horizon_years', 'wiz_start_capital', 'wiz_retirement_age', 'wiz_start_year']
+    for widget_key in key_widgets:
+        if widget_key in st.session_state:
+            print(f"DEBUG [sync_widget_values]: Found {widget_key} = {st.session_state[widget_key]}")
+        else:
+            print(f"DEBUG [sync_widget_values]: MISSING {widget_key}")
+
+    # Map widget keys to wizard_params keys
+    widget_mappings = {
+        # Financial Basics
+        'wiz_start_capital': 'start_capital',
+        'wiz_retirement_age': 'retirement_age',
+        'wiz_start_year': 'start_year',
+        'wiz_horizon_years': 'horizon_years',
+        'wiz_spending_method': 'spending_method',
+        'wiz_annual_spending': 'annual_spending',
+        'wiz_cape_now': 'cape_now',
+
+        # Asset Allocation
+        'wiz_equity_pct': 'equity_pct',
+        'wiz_bonds_pct': 'bonds_pct',
+        'wiz_real_estate_pct': 'real_estate_pct',
+        'wiz_glide_path': 'glide_path',
+        'wiz_equity_reduction': 'equity_reduction_per_year',
+
+        # Market Expectations
+        'wiz_equity_return': 'equity_return',
+        'wiz_bonds_return': 'bonds_return',
+        'wiz_real_estate_return': 'real_estate_return',
+        'wiz_cash_return': 'cash_return',
+        'wiz_equity_vol': 'equity_vol',
+        'wiz_bonds_vol': 'bonds_vol',
+        'wiz_real_estate_vol': 'real_estate_vol',
+        'wiz_inflation_rate': 'inflation_rate',
+
+        # Tax Planning
+        'wiz_selected_state': 'state',
+        'wiz_filing_status': 'filing_status',
+        'wiz_standard_deduction': 'standard_deduction',
+
+        # Social Security
+        'wiz_ss_primary_benefit': 'ss_primary_benefit',
+        'wiz_ss_primary_start_age': 'ss_primary_start_age',
+        'wiz_ss_spousal_benefit': 'ss_spousal_benefit',
+        'wiz_ss_spousal_start_age': 'ss_spousal_start_age',
+        'wiz_ss_funding_scenario': 'ss_funding_scenario',
+        'wiz_custom_reduction': 'ss_custom_reduction',
+        'wiz_reduction_start_year': 'ss_reduction_start_year',
+
+        # Guardrails
+        'wiz_lower_guardrail': 'lower_guardrail',
+        'wiz_upper_guardrail': 'upper_guardrail',
+        'wiz_spending_adjustment': 'spending_adjustment',
+        'wiz_max_increase': 'max_spending_increase',
+        'wiz_max_decrease': 'max_spending_decrease',
+        'wiz_spending_floor': 'spending_floor_real',
+        'wiz_spending_ceiling': 'spending_ceiling_real',
+        'wiz_floor_end_year': 'floor_end_year',
+
+        # AI Setup
+        'wiz_enable_ai': 'enable_ai',
+        'wiz_api_key': 'gemini_api_key',
+        'wiz_selected_model': 'gemini_model',
+
+        # Advanced Options
+        'wiz_college_enabled': 'college_enabled',
+        'wiz_college_amount': 'college_amount',
+        'wiz_college_years': 'college_years',
+        'wiz_college_start_year': 'college_start_year',
+        'wiz_inheritance_amount': 'inheritance_amount',
+        'wiz_inheritance_year': 'inheritance_year',
+        'wiz_market_regime': 'market_regime',
+        'wiz_num_simulations': 'num_simulations',
+        'wiz_cape_now_final': 'cape_now',
+    }
+
+    # Sync values from widget keys to wizard_params
+    synced_count = 0
+    for widget_key, param_key in widget_mappings.items():
+        if widget_key in st.session_state:
+            value = st.session_state[widget_key]
+
+            # Debug key values we're testing
+            if param_key in ['horizon_years', 'start_capital', 'retirement_age', 'start_year']:
+                print(f"DEBUG [sync_widget_values]: {param_key}: {st.session_state.wizard_params.get(param_key, 'MISSING')} -> {value}")
+
+            # Handle percentage conversions (widgets show as 0-100, params stored as 0-1)
+            if param_key in ['equity_pct', 'bonds_pct', 'real_estate_pct', 'cash_pct', 'equity_reduction_per_year',
+                           'equity_return', 'bonds_return', 'real_estate_return', 'cash_return',
+                           'equity_vol', 'bonds_vol', 'real_estate_vol', 'inflation_rate',
+                           'lower_guardrail', 'upper_guardrail', 'spending_adjustment',
+                           'max_spending_increase', 'max_spending_decrease']:
+                value = value / 100.0  # Convert from percentage to decimal
+
+            st.session_state.wizard_params[param_key] = value
+            synced_count += 1
+
+    print(f"DEBUG [sync_widget_values]: Synced {synced_count} widget values to wizard_params")
+
 def initialize_wizard_state():
-    """Initialize all wizard state variables"""
-    print(f"DEBUG [initialize_wizard_state]: Starting initialization...")
+    """Initialize all wizard state variables - runs when needed"""
+    # Initialize wizard_step if missing
     if 'wizard_step' not in st.session_state:
+        print(f"DEBUG [initialize_wizard_state]: First-time initialization...")
         st.session_state.wizard_step = 0
         print(f"DEBUG [initialize_wizard_state]: Set wizard_step to 0")
 
-    # Initialize all parameter storage
-    wizard_params_existed = 'wizard_params' in st.session_state
-    if not wizard_params_existed:
-        print(f"DEBUG [initialize_wizard_state]: Creating new wizard_params...")
+    # Initialize wizard_params if missing (can happen independently of wizard_step)
+    if 'wizard_params' not in st.session_state:
+        print(f"DEBUG [initialize_wizard_state]: Creating wizard_params...")
         st.session_state.wizard_params = {
             # Financial basics
             'start_capital': 2_500_000,
@@ -127,7 +248,7 @@ def initialize_wizard_state():
             'income_streams': [],
             'expense_streams': [],
 
-            # AI setup - load from existing config if available
+            # AI setup - will be loaded from config below
             'enable_ai': False,
             'gemini_api_key': '',
             'gemini_model': 'gemini-2.5-pro',
@@ -138,21 +259,35 @@ def initialize_wizard_state():
             'cape_now': 28.0
         }
 
-    # Always load UI config to sync AI settings (whether wizard_params existed or not)
-    print(f"DEBUG [initialize_wizard_state]: Loading UI config...")
-    ui_config = load_ui_config()
-    print(f"DEBUG [initialize_wizard_state]: UI config loaded, has {len(ui_config)} keys")
-    if ui_config:
-        # Override AI settings with saved values
-        api_key = ui_config.get('gemini_api_key', '')
-        enable_ai = ui_config.get('enable_ai_analysis', False)
-        print(f"DEBUG [initialize_wizard_state]: Setting wizard_params - enable_ai: {enable_ai}, api_key: {api_key[:10] if api_key else 'EMPTY'}...")
-        st.session_state.wizard_params['enable_ai'] = enable_ai
-        st.session_state.wizard_params['gemini_api_key'] = api_key
-        st.session_state.wizard_params['gemini_model'] = ui_config.get('gemini_model', 'gemini-2.5-pro')
-        print(f"DEBUG [initialize_wizard_state]: After setting - wizard_params enable_ai: {st.session_state.wizard_params.get('enable_ai', False)}, api_key: {st.session_state.wizard_params.get('gemini_api_key', '')[:10] if st.session_state.wizard_params.get('gemini_api_key') else 'EMPTY'}...")
-    else:
-        print(f"DEBUG [initialize_wizard_state]: No UI config loaded, keeping defaults")
+        # ONLY load UI config when creating wizard_params for first time
+        print(f"DEBUG [initialize_wizard_state]: Loading UI config for first time wizard_params creation...")
+        ui_config = load_ui_config()
+        print(f"DEBUG [initialize_wizard_state]: UI config loaded, has {len(ui_config)} keys")
+        if ui_config:
+            # Set AI settings from saved config
+            api_key = ui_config.get('gemini_api_key', '')
+            enable_ai = ui_config.get('enable_ai_analysis', False)
+            model = ui_config.get('gemini_model', 'gemini-2.5-pro')
+
+            print(f"DEBUG [initialize_wizard_state]: WRITING to wizard_params from ui_config.json:")
+            print(f"DEBUG [initialize_wizard_state]: enable_ai: {enable_ai} -> wizard_params['enable_ai']")
+            print(f"DEBUG [initialize_wizard_state]: api_key: {api_key[:10] if api_key else 'EMPTY'}... -> wizard_params['gemini_api_key']")
+            print(f"DEBUG [initialize_wizard_state]: model: {model} -> wizard_params['gemini_model']")
+
+            st.session_state.wizard_params['enable_ai'] = enable_ai
+            st.session_state.wizard_params['gemini_api_key'] = api_key
+            st.session_state.wizard_params['gemini_model'] = model
+
+            print(f"DEBUG [initialize_wizard_state]: AFTER WRITING - wizard_params AI values:")
+            print(f"DEBUG [initialize_wizard_state]: wizard_params['enable_ai'] = {st.session_state.wizard_params.get('enable_ai', 'MISSING')}")
+            print(f"DEBUG [initialize_wizard_state]: wizard_params['gemini_api_key'] = {st.session_state.wizard_params.get('gemini_api_key', 'MISSING')[:10] if st.session_state.wizard_params.get('gemini_api_key') else 'EMPTY'}...")
+            print(f"DEBUG [initialize_wizard_state]: wizard_params['gemini_model'] = {st.session_state.wizard_params.get('gemini_model', 'MISSING')}")
+        else:
+            print(f"DEBUG [initialize_wizard_state]: No UI config loaded, keeping default AI values in wizard_params")
+            print(f"DEBUG [initialize_wizard_state]: Default wizard_params AI values:")
+            print(f"DEBUG [initialize_wizard_state]: wizard_params['enable_ai'] = {st.session_state.wizard_params.get('enable_ai', 'MISSING')}")
+            print(f"DEBUG [initialize_wizard_state]: wizard_params['gemini_api_key'] = {st.session_state.wizard_params.get('gemini_api_key', 'MISSING')[:10] if st.session_state.wizard_params.get('gemini_api_key') else 'EMPTY'}...")
+            print(f"DEBUG [initialize_wizard_state]: wizard_params['gemini_model'] = {st.session_state.wizard_params.get('gemini_model', 'MISSING')}")
 
 def create_progress_bar():
     """Create a beautiful progress bar"""
@@ -349,26 +484,167 @@ def step_welcome():
                                 # Load into session state, but preserve existing AI config
                                 print(f"DEBUG [JSON loading]: About to load wizard params, preserving AI config...")
 
+                                # Mark that JSON loading is complete to prevent repeated widget key updates
+                                st.session_state.json_loading_complete = True
+
                                 # Preserve current AI configuration before overwriting
                                 current_ai_config = {
                                     'enable_ai': st.session_state.wizard_params.get('enable_ai', False),
                                     'gemini_api_key': st.session_state.wizard_params.get('gemini_api_key', ''),
                                     'gemini_model': st.session_state.wizard_params.get('gemini_model', 'gemini-2.5-pro')
                                 }
-                                print(f"DEBUG [JSON loading]: Preserved AI config - enable_ai: {current_ai_config['enable_ai']}, api_key: {current_ai_config['gemini_api_key'][:10] if current_ai_config['gemini_api_key'] else 'EMPTY'}...")
+                                print(f"DEBUG [JSON loading]: PRESERVING current AI config before overwrite:")
+                                print(f"DEBUG [JSON loading]: Current enable_ai: {current_ai_config['enable_ai']}")
+                                print(f"DEBUG [JSON loading]: Current api_key: {current_ai_config['gemini_api_key'][:10] if current_ai_config['gemini_api_key'] else 'EMPTY'}...")
+                                print(f"DEBUG [JSON loading]: Current model: {current_ai_config['gemini_model']}")
 
                                 # Overwrite wizard params with loaded data
+                                print(f"DEBUG [JSON loading]: OVERWRITING wizard_params with loaded JSON data...")
                                 st.session_state.wizard_params = wizard_params
 
-                                # Restore AI configuration (it usually isn't in JSON exports)
-                                if 'enable_ai' not in wizard_params:
-                                    st.session_state.wizard_params.update(current_ai_config)
-                                    print(f"DEBUG [JSON loading]: Restored AI config to wizard_params")
+                                # ALWAYS use ui_config.json for AI settings, ignore JSON file AI config
+                                print(f"DEBUG [JSON loading]: Loading current ui_config.json to override any AI config from JSON file...")
+                                current_ui_config = load_ui_config()
+                                if current_ui_config:
+                                    print(f"DEBUG [JSON loading]: OVERRIDING JSON AI config with ui_config.json:")
+                                    print(f"DEBUG [JSON loading]: ui_config enable_ai: {current_ui_config.get('enable_ai_analysis', False)} -> wizard_params['enable_ai']")
+                                    print(f"DEBUG [JSON loading]: ui_config api_key: {current_ui_config.get('gemini_api_key', '')[:10] if current_ui_config.get('gemini_api_key') else 'EMPTY'}... -> wizard_params['gemini_api_key']")
+                                    print(f"DEBUG [JSON loading]: ui_config model: {current_ui_config.get('gemini_model', 'gemini-2.5-pro')} -> wizard_params['gemini_model']")
+
+                                    st.session_state.wizard_params['enable_ai'] = current_ui_config.get('enable_ai_analysis', False)
+                                    st.session_state.wizard_params['gemini_api_key'] = current_ui_config.get('gemini_api_key', '')
+                                    st.session_state.wizard_params['gemini_model'] = current_ui_config.get('gemini_model', 'gemini-2.5-pro')
+                                    print(f"DEBUG [JSON loading]: AI config set from ui_config.json (ignoring JSON file AI values)")
                                 else:
-                                    print(f"DEBUG [JSON loading]: JSON contained AI config, keeping loaded values")
+                                    print(f"DEBUG [JSON loading]: No ui_config.json found, using preserved AI config:")
+                                    print(f"DEBUG [JSON loading]: Restoring enable_ai: {current_ai_config['enable_ai']} -> wizard_params['enable_ai']")
+                                    print(f"DEBUG [JSON loading]: Restoring api_key: {current_ai_config['gemini_api_key'][:10] if current_ai_config['gemini_api_key'] else 'EMPTY'}... -> wizard_params['gemini_api_key']")
+                                    print(f"DEBUG [JSON loading]: Restoring model: {current_ai_config['gemini_model']} -> wizard_params['gemini_model']")
+                                    st.session_state.wizard_params.update(current_ai_config)
+
+                                print(f"DEBUG [JSON loading]: FINAL wizard_params AI values:")
+                                print(f"DEBUG [JSON loading]: Final enable_ai: {st.session_state.wizard_params.get('enable_ai', 'MISSING')}")
+                                print(f"DEBUG [JSON loading]: Final api_key: {st.session_state.wizard_params.get('gemini_api_key', 'MISSING')[:10] if st.session_state.wizard_params.get('gemini_api_key') else 'EMPTY'}...")
+                                print(f"DEBUG [JSON loading]: Final model: {st.session_state.wizard_params.get('gemini_model', 'MISSING')}")
+
+                                # Also set widget keys directly to avoid circular state references
+                                # This ensures widgets show loaded values immediately
+                                widget_key_mappings = {
+                                    # Financial Basics
+                                    'start_capital': 'wiz_start_capital',
+                                    'retirement_age': 'wiz_retirement_age',
+                                    'start_year': 'wiz_start_year',
+                                    'horizon_years': 'wiz_horizon_years',
+                                    'spending_method': 'wiz_spending_method',
+                                    'annual_spending': 'wiz_annual_spending',
+                                    'cape_now': 'wiz_cape_now',
+
+                                    # Asset Allocation (percentages will be converted)
+                                    'equity_pct': 'wiz_equity_pct',
+                                    'bonds_pct': 'wiz_bonds_pct',
+                                    'real_estate_pct': 'wiz_real_estate_pct',
+                                    'glide_path': 'wiz_glide_path',
+                                    'equity_reduction_per_year': 'wiz_equity_reduction',
+
+                                    # Market Assumptions (percentages will be converted)
+                                    'equity_return': 'wiz_equity_return',
+                                    'bonds_return': 'wiz_bonds_return',
+                                    'real_estate_return': 'wiz_real_estate_return',
+                                    'cash_return': 'wiz_cash_return',
+                                    'equity_vol': 'wiz_equity_vol',
+                                    'bonds_vol': 'wiz_bonds_vol',
+                                    'real_estate_vol': 'wiz_real_estate_vol',
+                                    'inflation_rate': 'wiz_inflation_rate',
+
+                                    # Tax Planning
+                                    'state': 'wiz_selected_state',
+                                    'filing_status': 'wiz_filing_status',
+                                    'standard_deduction': 'wiz_standard_deduction',
+
+                                    # Social Security
+                                    'ss_primary_benefit': 'wiz_ss_primary_benefit',
+                                    'ss_primary_start_age': 'wiz_ss_primary_start_age',
+                                    'ss_spousal_benefit': 'wiz_ss_spousal_benefit',
+                                    'ss_spousal_start_age': 'wiz_ss_spousal_start_age',
+                                    'ss_funding_scenario': 'wiz_ss_funding_scenario',
+                                    'ss_custom_reduction': 'wiz_custom_reduction',
+                                    'ss_reduction_start_year': 'wiz_reduction_start_year',
+
+                                    # Guardrails (percentages will be converted)
+                                    'lower_guardrail': 'wiz_lower_guardrail',
+                                    'upper_guardrail': 'wiz_upper_guardrail',
+                                    'spending_adjustment': 'wiz_spending_adjustment',
+                                    'max_spending_increase': 'wiz_max_increase',
+                                    'max_spending_decrease': 'wiz_max_decrease',
+                                    'spending_floor_real': 'wiz_spending_floor',
+                                    'spending_ceiling_real': 'wiz_spending_ceiling',
+                                    'floor_end_year': 'wiz_floor_end_year',
+
+                                    # AI Setup
+                                    'enable_ai': 'wiz_enable_ai',
+                                    'gemini_api_key': 'wiz_api_key',
+                                    'gemini_model': 'wiz_selected_model',
+
+                                    # Advanced Options
+                                    'college_enabled': 'wiz_college_enabled',
+                                    'college_amount': 'wiz_college_amount',
+                                    'college_years': 'wiz_college_years',
+                                    'college_start_year': 'wiz_college_start_year',
+                                    'inheritance_amount': 'wiz_inheritance_amount',
+                                    'inheritance_year': 'wiz_inheritance_year',
+                                    'market_regime': 'wiz_market_regime',
+                                    'num_simulations': 'wiz_num_simulations',
+                                    'cape_now_final': 'wiz_cape_now_final',
+                                }
+
+                                # Only set widget keys immediately after JSON loading, not on every rerun
+                                if not st.session_state.get('json_widget_keys_set', False):
+                                    print(f"DEBUG [JSON loading]: Setting widget keys for the FIRST TIME after JSON load...")
+
+                                    # Clear any existing widget keys first to prevent old values from persisting
+                                    for param_key, widget_key in widget_key_mappings.items():
+                                        if widget_key in st.session_state:
+                                            print(f"DEBUG [JSON loading]: Clearing old {widget_key} = {st.session_state[widget_key]}")
+                                            del st.session_state[widget_key]
+
+                                    # Set new values from loaded JSON
+                                    percentage_params = ['equity_pct', 'bonds_pct', 'real_estate_pct', 'cash_pct', 'equity_reduction_per_year',
+                                                       'equity_return', 'bonds_return', 'real_estate_return', 'cash_return',
+                                                       'equity_vol', 'bonds_vol', 'real_estate_vol', 'inflation_rate',
+                                                       'lower_guardrail', 'upper_guardrail', 'spending_adjustment',
+                                                       'max_spending_increase', 'max_spending_decrease']
+
+                                    for param_key, widget_key in widget_key_mappings.items():
+                                        if param_key in wizard_params:
+                                            value = wizard_params[param_key]
+
+                                            # For AI settings, use the corrected values from wizard_params (which now has ui_config.json values)
+                                            if param_key in ['enable_ai', 'gemini_api_key', 'gemini_model']:
+                                                # Use the updated wizard_params value (from ui_config.json)
+                                                value = st.session_state.wizard_params[param_key]
+                                                print(f"DEBUG [JSON loading]: Set {widget_key} = {value} (from ui_config.json, not JSON file)")
+                                            # Convert decimal to percentage for widget display
+                                            elif param_key in percentage_params:
+                                                value = value * 100.0
+                                                print(f"DEBUG [JSON loading]: Set {widget_key} = {value}% (converted from {wizard_params[param_key]})")
+                                            else:
+                                                print(f"DEBUG [JSON loading]: Set {widget_key} = {value}")
+
+                                            st.session_state[widget_key] = value
+
+                                    print(f"DEBUG [JSON loading]: Updated {len(widget_key_mappings)} widget keys from loaded data")
+
+                                    # Mark that widget keys have been set to prevent doing this again
+                                    st.session_state.json_widget_keys_set = True
+                                    print(f"DEBUG [JSON loading]: Marked json_widget_keys_set = True to prevent future resets")
+                                else:
+                                    print(f"DEBUG [JSON loading]: SKIPPING widget key setting - already done (json_widget_keys_set = True)")
 
                                 # Set flag to show choice buttons on next rerun
                                 st.session_state.params_loaded_and_waiting_for_choice = True
+
+                                # Set flag to indicate we just loaded JSON (so we don't reset widget keys on every rerun)
+                                st.session_state.json_just_loaded = True
 
                                 st.success("✅ Parameters loaded successfully!")
                                 st.rerun()
@@ -451,39 +727,63 @@ def step_basics():
         start_capital = st.number_input(
             "Current Portfolio Value",
             min_value=0,
-            value=int(st.session_state.wizard_params.get('start_capital', 2_500_000)),
+            value=int(st.session_state.wizard_params.get('start_capital', 2_500_000)),  # Keep for JSON loading
             step=50000,
             format="%d",
-            help="Total value of your investment accounts (401k, IRA, taxable accounts, etc.)"
+            help="Total value of your investment accounts (401k, IRA, taxable accounts, etc.)",
+            key="wiz_start_capital"
         )
-        st.session_state.wizard_params['start_capital'] = start_capital
+
+        # Immediately sync change back to wizard_params to keep them in sync
+        if start_capital != st.session_state.wizard_params.get('start_capital'):
+            st.session_state.wizard_params['start_capital'] = start_capital
 
         retirement_age = st.slider(
             "Retirement Age",
             min_value=30,
             max_value=75,
-            value=st.session_state.wizard_params.get('retirement_age', 65),
-            help="Age when you plan to retire and start drawing from your portfolio. FIRE (Financial Independence, Retire Early) movement targets 30-50."
+            value=st.session_state.wizard_params.get('retirement_age', 65),  # Keep for JSON loading
+            help="Age when you plan to retire and start drawing from your portfolio. FIRE (Financial Independence, Retire Early) movement targets 30-50.",
+            key="wiz_retirement_age"
         )
-        st.session_state.wizard_params['retirement_age'] = retirement_age
+
+        # Immediately sync change back to wizard_params to keep them in sync
+        if retirement_age != st.session_state.wizard_params.get('retirement_age'):
+            st.session_state.wizard_params['retirement_age'] = retirement_age
 
         start_year = st.number_input(
             "Retirement Year",
             min_value=2024,
             max_value=2040,
-            value=st.session_state.wizard_params.get('start_year', 2025),
-            help="Year you plan to start retirement"
+            value=st.session_state.wizard_params.get('start_year', 2025),  # Keep for JSON loading
+            help="Year you plan to start retirement",
+            key="wiz_start_year"
         )
-        st.session_state.wizard_params['start_year'] = start_year
+
+        # Immediately sync change back to wizard_params to keep them in sync
+        if start_year != st.session_state.wizard_params.get('start_year'):
+            st.session_state.wizard_params['start_year'] = start_year
+
+        # Debug: Check widget key value before rendering
+        widget_key_value = st.session_state.get('wiz_horizon_years', 'NOT_SET')
+        wizard_params_value = st.session_state.wizard_params.get('horizon_years', 'NOT_SET')
+        print(f"DEBUG [horizon_years widget]: Before render - widget_key: {widget_key_value}, wizard_params: {wizard_params_value}")
 
         horizon_years = st.slider(
             "Planning Horizon (Years)",
             min_value=20,
             max_value=60,
-            value=st.session_state.wizard_params.get('horizon_years', 50),
-            help="How many years to plan for in retirement"
+            value=st.session_state.wizard_params.get('horizon_years', 50),  # Use wizard_params as source of truth
+            help="How many years to plan for in retirement",
+            key="wiz_horizon_years"
         )
-        st.session_state.wizard_params['horizon_years'] = horizon_years
+
+        print(f"DEBUG [horizon_years widget]: After render - slider returned: {horizon_years}")
+
+        # Immediately sync widget change back to wizard_params to keep them in sync
+        if horizon_years != st.session_state.wizard_params.get('horizon_years'):
+            st.session_state.wizard_params['horizon_years'] = horizon_years
+            print(f"DEBUG [horizon_years widget]: Synced change to wizard_params: {horizon_years}")
 
     with col2:
         st.markdown("### 💸 Annual Spending Needs")
@@ -499,7 +799,8 @@ def step_basics():
             options=['fixed', 'cape'],
             format_func=lambda x: "💰 Fixed amount every year" if x == 'fixed' else "📊 CAPE-based with guardrails",
             index=0 if st.session_state.wizard_params['spending_method'] == 'fixed' else 1,
-            help="Choose your approach:\n• Fixed: Same amount every year (no adjustments)\n• CAPE: Market-based calculation with dynamic guardrails"
+            help="Choose your approach:\n• Fixed: Same amount every year (no adjustments)\n• CAPE: Market-based calculation with dynamic guardrails",
+            key="wiz_spending_method"
         )
         st.session_state.wizard_params['spending_method'] = spending_method
 
@@ -510,7 +811,8 @@ def step_basics():
                 value=int(st.session_state.wizard_params.get('annual_spending', 100_000)),
                 step=5000,
                 format="%d",
-                help="How much you plan to spend each year in retirement (today's dollars)"
+                help="How much you plan to spend each year in retirement (today's dollars)",
+                key="wiz_annual_spending"
             )
             st.session_state.wizard_params['annual_spending'] = annual_spending
         else:
@@ -522,7 +824,8 @@ def step_basics():
                 max_value=45.0,
                 value=st.session_state.wizard_params.get('cape_now', 28.0),
                 step=1.0,
-                help="📊 Market valuation - higher CAPE = lower safe spending"
+                help="📊 Market valuation - higher CAPE = lower safe spending",
+                key="wiz_cape_now"
             )
             st.session_state.wizard_params['cape_now'] = cape_now
 
@@ -625,7 +928,8 @@ def step_allocation():
             max_value=100,
             value=int(st.session_state.wizard_params.get('equity_pct', 0.65) * 100),
             step=5,
-            help="Stocks provide growth but with higher volatility"
+            help="Stocks provide growth but with higher volatility",
+            key="wiz_equity_pct"
         ) / 100
 
         bonds_pct = st.slider(
@@ -634,7 +938,8 @@ def step_allocation():
             max_value=100 - int(equity_pct * 100),
             value=min(int(st.session_state.wizard_params.get('bonds_pct', 0.25) * 100), 100 - int(equity_pct * 100)),
             step=5,
-            help="Bonds provide stability and income with lower volatility"
+            help="Bonds provide stability and income with lower volatility",
+            key="wiz_bonds_pct"
         ) / 100
 
         remaining = 100 - int((equity_pct + bonds_pct) * 100)
@@ -645,7 +950,8 @@ def step_allocation():
             max_value=remaining,
             value=min(int(st.session_state.wizard_params.get('real_estate_pct', 0.08) * 100), remaining),
             step=2,
-            help="REITs provide diversification and inflation protection"
+            help="REITs provide diversification and inflation protection",
+            key="wiz_real_estate_pct"
         ) / 100
 
         cash_remaining = remaining - int(real_estate_pct * 100)
@@ -665,20 +971,27 @@ def step_allocation():
         glide_path = st.checkbox(
             "Enable Glide Path (Reduce Risk Over Time)",
             value=st.session_state.wizard_params.get('glide_path', True),
-            help="Automatically reduce stock allocation as you age"
+            help="Automatically reduce stock allocation as you age",
+            key="wiz_glide_path"
         )
         st.session_state.wizard_params['glide_path'] = glide_path
 
         if glide_path:
-            equity_reduction = st.slider(
+            equity_reduction_pct = st.slider(
                 "Annual Equity Reduction (%)",
                 min_value=0.0,
                 max_value=1.0,
                 value=st.session_state.wizard_params.get('equity_reduction_per_year', 0.005) * 100,
                 step=0.1,
-                help="How much to reduce equity allocation each year"
-            ) / 100
-            st.session_state.wizard_params['equity_reduction_per_year'] = equity_reduction
+                help="How much to reduce equity allocation each year",
+                key="wiz_equity_reduction"
+            )
+
+            # Convert to decimal and immediately sync back to wizard_params
+            equity_reduction = equity_reduction_pct / 100
+            if equity_reduction != st.session_state.wizard_params.get('equity_reduction_per_year'):
+                st.session_state.wizard_params['equity_reduction_per_year'] = equity_reduction
+                print(f"DEBUG [equity_reduction widget]: Synced change to wizard_params: {equity_reduction}")
 
     with col2:
         st.markdown("### 📈 Your Portfolio Visualization")
@@ -858,7 +1171,8 @@ def step_market():
             max_value=12.0,
             value=st.session_state.wizard_params.get('equity_return', 0.0742) * 100,
             step=0.1,
-            help="Historical average: ~10.5%. Conservative: 6-8%, Moderate: 7-9%, Aggressive: 9-11%"
+            help="Historical average: ~10.5%. Conservative: 6-8%, Moderate: 7-9%, Aggressive: 9-11%",
+            key="wiz_equity_return"
         ) / 100
 
         bonds_return = st.slider(
@@ -867,7 +1181,8 @@ def step_market():
             max_value=8.0,
             value=st.session_state.wizard_params.get('bonds_return', 0.0318) * 100,
             step=0.1,
-            help="Historical average: ~6.8%. Current low-rate environment: 2-4%"
+            help="Historical average: ~6.8%. Current low-rate environment: 2-4%",
+            key="wiz_bonds_return"
         ) / 100
 
         real_estate_return = st.slider(
@@ -876,7 +1191,8 @@ def step_market():
             max_value=10.0,
             value=st.session_state.wizard_params.get('real_estate_return', 0.0563) * 100,
             step=0.1,
-            help="Historical average: ~9.7%. Typically between bonds and stocks"
+            help="Historical average: ~9.7%. Typically between bonds and stocks",
+            key="wiz_real_estate_return"
         ) / 100
 
         cash_return = st.slider(
@@ -885,7 +1201,8 @@ def step_market():
             max_value=6.0,
             value=st.session_state.wizard_params.get('cash_return', 0.0225) * 100,
             step=0.1,
-            help="Usually close to inflation. Current rates: 4-5%"
+            help="Usually close to inflation. Current rates: 4-5%",
+            key="wiz_cash_return"
         ) / 100
 
         # Store values
@@ -903,7 +1220,8 @@ def step_market():
             max_value=25.0,
             value=st.session_state.wizard_params.get('equity_vol', 0.1734) * 100,
             step=0.5,
-            help="Historical: ~17%. How much stocks bounce around year-to-year"
+            help="Historical: ~17%. How much stocks bounce around year-to-year",
+            key="wiz_equity_vol"
         ) / 100
 
         bonds_vol = st.slider(
@@ -912,7 +1230,8 @@ def step_market():
             max_value=10.0,
             value=st.session_state.wizard_params.get('bonds_vol', 0.0576) * 100,
             step=0.2,
-            help="Historical: ~5.8%. Bonds are much more stable than stocks"
+            help="Historical: ~5.8%. Bonds are much more stable than stocks",
+            key="wiz_bonds_vol"
         ) / 100
 
         real_estate_vol = st.slider(
@@ -921,7 +1240,8 @@ def step_market():
             max_value=25.0,
             value=st.session_state.wizard_params.get('real_estate_vol', 0.1612) * 100,
             step=0.5,
-            help="Historical: ~16.1%. Similar to stocks but with different timing"
+            help="Historical: ~16.1%. Similar to stocks but with different timing",
+            key="wiz_real_estate_vol"
         ) / 100
 
         inflation_rate = st.slider(
@@ -930,7 +1250,8 @@ def step_market():
             max_value=5.0,
             value=st.session_state.wizard_params.get('inflation_rate', 0.025) * 100,
             step=0.1,
-            help="Long-term Fed target: 2%. Historical average: ~2.5%"
+            help="Long-term Fed target: 2%. Historical average: ~2.5%",
+            key="wiz_inflation_rate"
         ) / 100
 
         # Store values
@@ -1000,7 +1321,8 @@ def step_ai_setup():
         enable_ai = st.checkbox(
             "Enable AI-Powered Analysis",
             value=current_wizard_enable_ai,
-            help="Get personalized recommendations from Google Gemini AI"
+            help="Get personalized recommendations from Google Gemini AI",
+            key="wiz_enable_ai"
         )
         print(f"DEBUG: Checkbox returned: {enable_ai}")
         st.session_state.wizard_params['enable_ai'] = enable_ai
@@ -1041,7 +1363,8 @@ def step_ai_setup():
                 "Gemini API Key",
                 value=current_wizard_api_key,
                 type="password",
-                help="Your free API key from Google AI Studio"
+                help="Your free API key from Google AI Studio",
+                key="wiz_api_key"
             )
             print(f"DEBUG: Text input returned: {api_key[:10] if api_key else 'empty'}...")
             st.session_state.wizard_params['gemini_api_key'] = api_key
@@ -1055,7 +1378,8 @@ def step_ai_setup():
                 options=model_options,
                 index=model_options.index(st.session_state.wizard_params.get('gemini_model', 'gemini-2.5-pro')) if st.session_state.wizard_params.get('gemini_model', 'gemini-2.5-pro') in model_options else 0,
                 format_func=lambda x: available_models[x],
-                help="Gemini 2.5 Pro is the most capable model for retirement analysis"
+                help="Gemini 2.5 Pro is the most capable model for retirement analysis",
+                key="wiz_selected_model"
             )
             st.session_state.wizard_params['gemini_model'] = selected_model
 
@@ -1206,7 +1530,8 @@ def step_taxes():
             options=state_options,
             index=state_options.index(st.session_state.wizard_params.get('state', 'CA')),
             format_func=lambda x: state_names[x],
-            help="Choose where you plan to spend most of your retirement"
+            help="Choose where you plan to spend most of your retirement",
+            key="wiz_selected_state"
         )
         st.session_state.wizard_params['state'] = selected_state
 
@@ -1214,7 +1539,8 @@ def step_taxes():
             "Filing Status",
             options=['MFJ', 'Single'],
             index=0 if st.session_state.wizard_params.get('filing_status', 'MFJ') == 'MFJ' else 1,
-            help="Married Filing Jointly typically has lower rates"
+            help="Married Filing Jointly typically has lower rates",
+            key="wiz_filing_status"
         )
         st.session_state.wizard_params['filing_status'] = filing_status
 
@@ -1224,7 +1550,8 @@ def step_taxes():
             max_value=50000,
             value=int(st.session_state.wizard_params.get('standard_deduction', 29200)),
             step=1000,
-            help="2025 standard deduction amounts"
+            help="2025 standard deduction amounts",
+            key="wiz_standard_deduction"
         )
         st.session_state.wizard_params['standard_deduction'] = standard_deduction
 
@@ -1344,7 +1671,8 @@ def step_social_security():
             max_value=80000,
             value=int(st.session_state.wizard_params.get('ss_primary_benefit', 40000)),
             step=1000,
-            help="Estimated annual benefit at full retirement age (check ssa.gov)"
+            help="Estimated annual benefit at full retirement age (check ssa.gov)",
+            key="wiz_ss_primary_benefit"
         )
         st.session_state.wizard_params['ss_primary_benefit'] = ss_primary_benefit
 
@@ -1353,7 +1681,8 @@ def step_social_security():
             min_value=62,
             max_value=70,
             value=st.session_state.wizard_params.get('ss_primary_start_age', 67),
-            help="62=reduced benefits, 67=full benefits, 70=maximum benefits"
+            help="62=reduced benefits, 67=full benefits, 70=maximum benefits",
+            key="wiz_ss_primary_start_age"
         )
         st.session_state.wizard_params['ss_primary_start_age'] = ss_primary_start_age
 
@@ -1378,7 +1707,8 @@ def step_social_security():
             max_value=60000,
             value=int(st.session_state.wizard_params.get('ss_spousal_benefit', 0)),
             step=1000,
-            help="Leave at 0 if no spouse or spouse has no benefits"
+            help="Leave at 0 if no spouse or spouse has no benefits",
+            key="wiz_ss_spousal_benefit"
         )
         st.session_state.wizard_params['ss_spousal_benefit'] = ss_spousal_benefit
 
@@ -1388,7 +1718,8 @@ def step_social_security():
                 min_value=62,
                 max_value=70,
                 value=st.session_state.wizard_params.get('ss_spousal_start_age', 67),
-                help="Spouse's claiming age"
+                help="Spouse's claiming age",
+                key="wiz_ss_spousal_start_age"
             )
             st.session_state.wizard_params['ss_spousal_start_age'] = ss_spousal_start_age
 
@@ -1407,7 +1738,8 @@ def step_social_security():
             options=list(funding_scenarios.keys()),
             index=list(funding_scenarios.keys()).index(st.session_state.wizard_params.get('ss_funding_scenario', 'moderate')),
             format_func=lambda x: funding_scenarios[x],
-            help="Based on 2024 Social Security Trustees Report projections"
+            help="Based on 2024 Social Security Trustees Report projections",
+            key="wiz_ss_funding_scenario"
         )
         st.session_state.wizard_params['ss_funding_scenario'] = ss_funding_scenario
 
@@ -1418,7 +1750,8 @@ def step_social_security():
                 max_value=30.0,
                 value=st.session_state.wizard_params.get('ss_custom_reduction', 10.0),
                 step=1.0,
-                help="Percentage reduction in benefits"
+                help="Percentage reduction in benefits",
+                key="wiz_custom_reduction"
             ) / 100
             st.session_state.wizard_params['ss_custom_reduction'] = custom_reduction
 
@@ -1427,7 +1760,8 @@ def step_social_security():
                 min_value=2025,
                 max_value=2050,
                 value=st.session_state.wizard_params.get('ss_reduction_start_year', 2034),
-                help="When benefit cuts begin"
+                help="When benefit cuts begin",
+                key="wiz_reduction_start_year"
             )
             st.session_state.wizard_params['ss_reduction_start_year'] = reduction_start_year
 
@@ -1566,7 +1900,8 @@ def step_guardrails():
             max_value=5.0,
             value=st.session_state.wizard_params.get('lower_guardrail', 0.03) * 100,  # Convert from decimal to %
             step=0.1,
-            help="If withdrawal rate exceeds this, cut spending"
+            help="If withdrawal rate exceeds this, cut spending",
+            key="wiz_lower_guardrail"
         ) / 100
         st.session_state.wizard_params['lower_guardrail'] = lower_guardrail
 
@@ -1576,7 +1911,8 @@ def step_guardrails():
             max_value=5.0,
             value=st.session_state.wizard_params.get('upper_guardrail', 0.05) * 100,  # Convert from decimal to %
             step=0.1,
-            help="If withdrawal rate falls below this, increase spending"
+            help="If withdrawal rate falls below this, increase spending",
+            key="wiz_upper_guardrail"
         ) / 100
         st.session_state.wizard_params['upper_guardrail'] = upper_guardrail
 
@@ -1586,7 +1922,8 @@ def step_guardrails():
             max_value=20.0,
             value=st.session_state.wizard_params.get('spending_adjustment', 0.10) * 100,  # Convert from decimal to %
             step=1.0,
-            help="How much to adjust spending when guardrails trigger"
+            help="How much to adjust spending when guardrails trigger",
+            key="wiz_spending_adjustment"
         ) / 100
         st.session_state.wizard_params['spending_adjustment'] = spending_adjustment
 
@@ -1596,7 +1933,8 @@ def step_guardrails():
             max_value=15.0,
             value=st.session_state.wizard_params.get('max_spending_increase', 0.10) * 100,  # Convert from decimal to %
             step=1.0,
-            help="Cap on annual spending increases"
+            help="Cap on annual spending increases",
+            key="wiz_max_increase"
         ) / 100
         st.session_state.wizard_params['max_spending_increase'] = max_increase
 
@@ -1606,6 +1944,7 @@ def step_guardrails():
             max_value=25.0,
             value=st.session_state.wizard_params.get('max_spending_decrease', 0.10) * 100,  # Convert from decimal to %
             step=1.0,
+            key="wiz_max_decrease",
             help="Cap on annual spending decreases"
         ) / 100
         st.session_state.wizard_params['max_spending_decrease'] = max_decrease
@@ -1619,7 +1958,8 @@ def step_guardrails():
             max_value=500_000,
             value=int(st.session_state.wizard_params.get('spending_floor_real', 160_000)),
             step=5_000,
-            help="💰 **Minimum annual spending** - Never go below this amount (real dollars)\n\n• Essential expenses coverage\n• Healthcare and housing minimums\n• Only applies until Floor End Year"
+            help="💰 **Minimum annual spending** - Never go below this amount (real dollars)\n\n• Essential expenses coverage\n• Healthcare and housing minimums\n• Only applies until Floor End Year",
+            key="wiz_spending_floor"
         )
         st.session_state.wizard_params['spending_floor_real'] = spending_floor
 
@@ -1629,7 +1969,8 @@ def step_guardrails():
             max_value=1_000_000,
             value=int(st.session_state.wizard_params.get('spending_ceiling_real', 275_000)),
             step=5_000,
-            help="🏠 **Maximum annual spending** - Never exceed this amount (real dollars)\n\n• Lifestyle cap or practical limit\n• Applies throughout retirement\n• Prevents excessive withdrawals"
+            help="🏠 **Maximum annual spending** - Never exceed this amount (real dollars)\n\n• Lifestyle cap or practical limit\n• Applies throughout retirement\n• Prevents excessive withdrawals",
+            key="wiz_spending_ceiling"
         )
         st.session_state.wizard_params['spending_ceiling_real'] = spending_ceiling
 
@@ -1639,7 +1980,8 @@ def step_guardrails():
             max_value=2080,
             value=st.session_state.wizard_params.get('floor_end_year', 2041),
             step=1,
-            help="📅 **When spending floor stops applying**\n\n• Typical: First 15-20 years of retirement\n• After this year, spending can drop below floor\n• Reflects reduced needs in later retirement"
+            help="📅 **When spending floor stops applying**\n\n• Typical: First 15-20 years of retirement\n• After this year, spending can drop below floor\n• Reflects reduced needs in later retirement",
+            key="wiz_floor_end_year"
         )
         st.session_state.wizard_params['floor_end_year'] = floor_end_year
         st.markdown("### 📊 How Guardrails Work")
@@ -1935,7 +2277,8 @@ def step_advanced():
         college_enabled = st.checkbox(
             "Include College Expenses",
             value=st.session_state.wizard_params.get('college_enabled', False),
-            help="Add college tuition and expenses to your plan"
+            help="Add college tuition and expenses to your plan",
+            key="wiz_college_enabled"
         )
         st.session_state.wizard_params['college_enabled'] = college_enabled
 
@@ -1946,7 +2289,8 @@ def step_advanced():
                 max_value=200000,
                 value=int(st.session_state.wizard_params.get('college_amount', 75000)),
                 step=5000,
-                help="Annual cost per student"
+                help="Annual cost per student",
+                key="wiz_college_amount"
             )
             st.session_state.wizard_params['college_amount'] = college_amount
 
@@ -1955,7 +2299,8 @@ def step_advanced():
                 min_value=2,
                 max_value=16,
                 value=st.session_state.wizard_params.get('college_years', 8),
-                help="Total years across all children"
+                help="Total years across all children",
+                key="wiz_college_years"
             )
             st.session_state.wizard_params['college_years'] = college_years
 
@@ -1963,7 +2308,8 @@ def step_advanced():
                 "College Start Year",
                 min_value=2025,
                 max_value=2050,
-                value=st.session_state.wizard_params.get('college_start_year', 2032)
+                value=st.session_state.wizard_params.get('college_start_year', 2032),
+                key="wiz_college_start_year"
             )
             st.session_state.wizard_params['college_start_year'] = college_start_year
 
@@ -1975,7 +2321,8 @@ def step_advanced():
             max_value=5000000,
             value=int(st.session_state.wizard_params.get('inheritance_amount', 0)),
             step=25000,
-            help="One-time inheritance expected during retirement"
+            help="One-time inheritance expected during retirement",
+            key="wiz_inheritance_amount"
         )
         st.session_state.wizard_params['inheritance_amount'] = inheritance_amount
 
@@ -1984,7 +2331,8 @@ def step_advanced():
                 "Inheritance Year",
                 min_value=2025,
                 max_value=2065,
-                value=st.session_state.wizard_params.get('inheritance_year', 2040)
+                value=st.session_state.wizard_params.get('inheritance_year', 2040),
+                key="wiz_inheritance_year"
             )
             st.session_state.wizard_params['inheritance_year'] = inheritance_year
 
@@ -2004,19 +2352,33 @@ def step_advanced():
             options=list(market_scenarios.keys()),
             index=list(market_scenarios.keys()).index(st.session_state.wizard_params.get('market_regime', 'baseline')),
             format_func=lambda x: market_scenarios[x],
-            help="Test your plan against different market conditions"
+            help="Test your plan against different market conditions",
+            key="wiz_market_regime"
         )
         st.session_state.wizard_params['market_regime'] = market_regime
 
         st.markdown("### 🔢 Simulation Settings")
 
+        # Get current value and find its index in options
+        options = [1000, 5000, 10000, 25000]
+        current_sims = st.session_state.wizard_params.get('num_simulations', 10000)
+        try:
+            current_index = options.index(current_sims)
+        except ValueError:
+            current_index = 2  # Default to 10,000 if not found
+
         num_simulations = st.selectbox(
             "Number of Simulations",
-            options=[1000, 5000, 10000, 25000],
-            index=2,  # Default to 10,000
-            help="More simulations = more accurate but slower"
+            options=options,
+            index=current_index,  # Use wizard_params as source of truth
+            help="More simulations = more accurate but slower",
+            key="wiz_num_simulations"
         )
-        st.session_state.wizard_params['num_simulations'] = num_simulations
+
+        # Immediately sync back to wizard_params
+        if num_simulations != st.session_state.wizard_params.get('num_simulations'):
+            st.session_state.wizard_params['num_simulations'] = num_simulations
+            print(f"DEBUG [num_simulations widget]: Synced change to wizard_params: {num_simulations}")
 
         cape_now = st.slider(
             "Current CAPE Ratio",
@@ -2024,7 +2386,8 @@ def step_advanced():
             max_value=45.0,
             value=st.session_state.wizard_params.get('cape_now', 28.0),
             step=1.0,
-            help="📊 **Market valuation metric** - Cyclically Adjusted PE Ratio\n\nUsed to set initial withdrawal rate: Base Rate = 1.75% + 0.5 × (1/CAPE)\n\n• Low CAPE (~15): Higher safe withdrawal\n• High CAPE (~35+): Lower safe withdrawal\n• Historical average: ~20-25\n• Current market: Check Robert Shiller's data"
+            help="📊 **Market valuation metric** - Cyclically Adjusted PE Ratio\n\nUsed to set initial withdrawal rate: Base Rate = 1.75% + 0.5 × (1/CAPE)\n\n• Low CAPE (~15): Higher safe withdrawal\n• High CAPE (~35+): Lower safe withdrawal\n• Historical average: ~20-25\n• Current market: Check Robert Shiller's data",
+            key="wiz_cape_now_final"
         )
         st.session_state.wizard_params['cape_now'] = cape_now
 
@@ -2060,11 +2423,10 @@ def step_advanced():
 def step_review():
     """Final review and JSON generation step"""
 
-    # Check if wizard was completed and redirect
+    # Check if wizard was completed - but allow re-entry for parameter edits
     if st.session_state.get('wizard_completed', False):
-        st.success("✅ **Wizard completed!** Redirecting to Monte Carlo Analysis...")
-        st.switch_page("pages/monte_carlo.py")
-        return
+        st.info("🔄 **Wizard was previously completed.** You can review and modify your configuration below.")
+        # Allow user to continue using wizard instead of auto-redirecting
 
     st.markdown("""
     # 📋 Review & Generate Configuration
@@ -2194,8 +2556,9 @@ def step_review():
 
 # Function moved to io_utils.py to avoid circular imports
 
-# Initialize wizard state
-initialize_wizard_state()
+# Initialize wizard state only if needed
+if 'wizard_step' not in st.session_state or 'wizard_params' not in st.session_state:
+    initialize_wizard_state()
 
 # Header
 st.markdown("""
@@ -2418,7 +2781,10 @@ st.markdown("---")
 
 # Check for jump to simulation request (must be before step routing)
 if st.session_state.get('jump_to_sim_requested', False):
+    # Sync current widget values to wizard_params before transition
+    sync_widget_values_to_wizard_params()
     st.session_state.wizard_completed = True
+    st.session_state.parameters_loaded = False  # Force re-transfer on Monte Carlo page
     st.session_state.jump_to_sim_requested = False  # Reset flag
     st.write("🚀 Jumping to simulation...")
     st.switch_page("pages/monte_carlo.py")
@@ -2466,6 +2832,9 @@ if st.session_state.wizard_step == len(WIZARD_STEPS) - 1:  # On review step
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("📊 Continue to Monte Carlo Analysis", type="primary"):
+            # Sync current widget values to wizard_params before completion
+            sync_widget_values_to_wizard_params()
             # Mark wizard as completed and transfer parameters
             st.session_state.wizard_completed = True
+            st.session_state.parameters_loaded = False  # Force re-transfer on Monte Carlo page
             st.switch_page("pages/monte_carlo.py")
