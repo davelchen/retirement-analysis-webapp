@@ -629,7 +629,14 @@ def create_sidebar():
     st.session_state.cape_now = st.sidebar.number_input(
         "CAPE Ratio",
         value=st.session_state.cape_now,
-        help="📊 **Current market valuation metric**\n\nCyclically Adjusted PE Ratio. Used to set initial withdrawal rate:\nBase Rate = 1.75% + 0.5 × (1/CAPE)\n\n• Low CAPE (~15): Higher safe withdrawal\n• High CAPE (~35+): Lower safe withdrawal"
+        help="📊 **CAPE = Cyclically Adjusted P/E Ratio** (Market Valuation)\n\n"
+             "What it is: Stock market 'expensiveness' smoothed over 10 years\n"
+             "• Low CAPE (15-20): Stocks cheap → Higher safe withdrawal rates\n"
+             "• High CAPE (30-40): Stocks expensive → Lower safe withdrawal rates\n\n"
+             "How we use it: Sets your initial withdrawal rate\n"
+             "Formula: Base 1.75% + 0.5 × (1/CAPE)\n\n"
+             "Current market: ~28-35 (check Robert Shiller's data)\n"
+             "Historical range: 5 (1920s) to 45+ (dot-com bubble)"
     )
 
     # Calculate and display CAPE-based withdrawal rate and initial spending
@@ -665,7 +672,7 @@ def create_sidebar():
             'fixed': "🔒 Fixed annual amount"
         }[x],
         index=['cape', 'fixed'].index(st.session_state.spending_method if st.session_state.spending_method in ['cape', 'fixed'] else 'cape'),
-        help="Choose spending approach:\n• CAPE: Market-based calculation with guardrails\n• Fixed: Same amount every year (no guardrails)"
+        help="Choose spending approach:\n• CAPE: Market valuation-based calculation with guardrails\n• Fixed: Same amount every year (no guardrails)\n\nCAPE = Cyclically Adjusted P/E Ratio (measures market expensiveness)"
     )
     st.session_state.spending_method = spending_method
 
@@ -1250,11 +1257,20 @@ def create_sidebar():
     st.sidebar.header("Save Parameters")
     if st.sidebar.button("📄 Download JSON", help="💾 **Download current parameters**\n\nSave all current simulation settings to a JSON file. Use the wizard to load saved parameters later."):
         params = get_current_params()
-        json_str = create_parameters_download_json(params)
+
+        # Convert SimulationParams to wizard_params format for consistent JSON structure
+        from io_utils import convert_simulation_params_to_wizard_params, convert_wizard_to_json
+        from datetime import datetime
+        import json
+
+        wizard_params = convert_simulation_params_to_wizard_params(params)
+        json_params = convert_wizard_to_json(wizard_params)
+        json_str = json.dumps(json_params, indent=2)
+
         st.sidebar.download_button(
             label="💾 Download",
             data=json_str,
-            file_name="retirement_parameters.json",
+            file_name=f"retirement_config_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json"
         )
 
@@ -1474,6 +1490,9 @@ def display_ai_analysis_section():
                             # Store the analysis result
                             st.session_state.ai_analysis_result = analysis
 
+                            # Rerun to display the results immediately
+                            st.rerun()
+
                     except Exception as e:
                         st.error(f"❌ AI Analysis failed: {str(e)}")
                         return
@@ -1483,7 +1502,8 @@ def display_ai_analysis_section():
                     analysis = create_mock_analysis(current_results.success_rate)
                     st.session_state.ai_analysis_result = analysis
 
-                # Results will be displayed automatically since ai_analysis_result is now set
+                    # Rerun to display the results immediately
+                    st.rerun()
 
     else:
         st.info("💡 Enable AI analysis above for **free** personalized retirement recommendations powered by Google Gemini")

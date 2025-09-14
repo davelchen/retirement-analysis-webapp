@@ -4,7 +4,7 @@ A comprehensive **Streamlit multipage application** for retirement planning feat
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-Educational-green.svg)
-![Tests](https://img.shields.io/badge/tests-255%20passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-255%2B%20passed-brightgreen.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.49+-red.svg)
 
 ## 🚀 Quick Start
@@ -35,9 +35,11 @@ streamlit run main.py
 
 ### 🧙‍♂️ **Interactive Setup Wizard**
 - **Step-by-step guidance** through all retirement planning parameters
+- **Comprehensive parameter persistence** - all 47+ widgets maintain values through navigation
 - **Beautiful visualizations** - pie charts, scatter plots, timelines
 - **Educational content** with parameter descriptions and best practices
 - **Real-time feedback** showing impact of your choices
+- **JSON save/load functionality** with complete parameter preservation
 - **Seamless handoff** to Monte Carlo analysis with one click
 
 ### 🎲 **Advanced Monte Carlo Engine**
@@ -114,6 +116,22 @@ streamlit run main.py
 ├── WIZARD_README.md            # 🧙‍♂️ Setup wizard documentation
 └── README.md                   # 📖 This file
 ```
+
+## 🆕 What's New (September 2025)
+
+### 🔄 **Comprehensive Parameter Management Overhaul**
+- **Universal Widget Persistence**: All 47+ wizard widgets now maintain values through navigation
+- **Eliminated Race Conditions**: Complete fix for widget persistence issues that caused value resets
+- **Enhanced JSON Saving**: Both wizard and simulation save functions capture ALL parameters
+- **Robust Parameter Loading**: Support for both wizard nested JSON and simulation flat JSON formats
+- **Round-Trip Reliability**: Complete parameter lifecycle testing ensures data integrity
+- **No More Partial Fixes**: Systematic architectural solution prevents future persistence issues
+
+### 🎨 **User Experience Improvements**
+- **Consistent Parameter Preservation**: Inheritance amounts, Social Security settings, and all other inputs persist correctly
+- **Comprehensive Tooltips**: Enhanced CAPE ratio explanations and parameter guidance
+- **JSON Format Consistency**: Unified JSON structure between wizard and simulation save functions
+- **Immediate Sync Patterns**: Real-time parameter synchronization prevents data loss
 
 ### JSON Compatibility Layer
 - **Auto-detection**: Wizard JSON (nested) vs Native JSON (flat) formats

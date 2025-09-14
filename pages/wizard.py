@@ -166,8 +166,44 @@ def sync_widget_values_to_wizard_params():
 
     # Sync values from widget keys to wizard_params
     synced_count = 0
+
+    # Skip widgets that already have immediate sync to prevent overwriting
+    widgets_with_immediate_sync = [
+        # Financial Basics (already had immediate sync)
+        'wiz_horizon_years', 'wiz_start_capital', 'wiz_retirement_age', 'wiz_start_year',
+        # Financial Basics (newly added)
+        'wiz_spending_method', 'wiz_annual_spending', 'wiz_cape_now',
+        # Asset Allocation (newly added)
+        'wiz_equity_pct', 'wiz_bonds_pct', 'wiz_real_estate_pct', 'wiz_glide_path',
+        'wiz_equity_reduction',  # already had immediate sync
+        # Market Expectations (newly added)
+        'wiz_equity_return', 'wiz_bonds_return', 'wiz_real_estate_return', 'wiz_cash_return',
+        'wiz_equity_vol', 'wiz_bonds_vol', 'wiz_real_estate_vol', 'wiz_inflation_rate',
+        # AI Setup (newly added)
+        'wiz_enable_ai', 'wiz_api_key', 'wiz_selected_model',
+        # Tax Planning (newly added)
+        'wiz_selected_state', 'wiz_filing_status', 'wiz_standard_deduction',
+        # Social Security (newly added)
+        'wiz_ss_primary_benefit', 'wiz_ss_primary_start_age', 'wiz_ss_spousal_benefit',
+        'wiz_ss_spousal_start_age', 'wiz_ss_funding_scenario', 'wiz_custom_reduction', 'wiz_reduction_start_year',
+        # Guardrails (newly added)
+        'wiz_lower_guardrail', 'wiz_upper_guardrail', 'wiz_spending_adjustment',
+        'wiz_max_increase', 'wiz_max_decrease', 'wiz_spending_floor', 'wiz_spending_ceiling', 'wiz_floor_end_year',
+        # Advanced Options (newly added)
+        'wiz_college_enabled', 'wiz_college_amount', 'wiz_college_years', 'wiz_college_start_year',
+        'wiz_inheritance_amount',  # already had immediate sync
+        'wiz_inheritance_year', 'wiz_market_regime',
+        'wiz_num_simulations',  # already had immediate sync
+        'wiz_cape_now_final'
+    ]
+
     for widget_key, param_key in widget_mappings.items():
         if widget_key in st.session_state:
+            # Skip widgets that already have immediate sync
+            if widget_key in widgets_with_immediate_sync:
+                print(f"DEBUG [sync_widget_values]: SKIPPING {param_key} - has immediate sync")
+                continue
+
             value = st.session_state[widget_key]
 
             # Debug key values we're testing
@@ -767,7 +803,8 @@ def step_basics():
         # Debug: Check widget key value before rendering
         widget_key_value = st.session_state.get('wiz_horizon_years', 'NOT_SET')
         wizard_params_value = st.session_state.wizard_params.get('horizon_years', 'NOT_SET')
-        print(f"DEBUG [horizon_years widget]: Before render - widget_key: {widget_key_value}, wizard_params: {wizard_params_value}")
+        value_param_will_use = st.session_state.wizard_params.get('horizon_years', 50)
+        print(f"DEBUG [horizon_years widget]: Before render - widget_key: {widget_key_value}, wizard_params: {wizard_params_value}, value_param: {value_param_will_use}")
 
         horizon_years = st.slider(
             "Planning Horizon (Years)",
@@ -799,10 +836,12 @@ def step_basics():
             options=['fixed', 'cape'],
             format_func=lambda x: "💰 Fixed amount every year" if x == 'fixed' else "📊 CAPE-based with guardrails",
             index=0 if st.session_state.wizard_params['spending_method'] == 'fixed' else 1,
-            help="Choose your approach:\n• Fixed: Same amount every year (no adjustments)\n• CAPE: Market-based calculation with dynamic guardrails",
+            help="Choose your approach:\n• Fixed: Same amount every year (no adjustments)\n• CAPE: Market valuation-based calculation with dynamic guardrails\n\nCAPE = Cyclically Adjusted P/E Ratio (measures market expensiveness)",
             key="wiz_spending_method"
         )
-        st.session_state.wizard_params['spending_method'] = spending_method
+        # Immediately sync change back to wizard_params
+        if spending_method != st.session_state.wizard_params.get('spending_method'):
+            st.session_state.wizard_params['spending_method'] = spending_method
 
         if spending_method == 'fixed':
             annual_spending = st.number_input(
@@ -814,7 +853,9 @@ def step_basics():
                 help="How much you plan to spend each year in retirement (today's dollars)",
                 key="wiz_annual_spending"
             )
-            st.session_state.wizard_params['annual_spending'] = annual_spending
+            # Immediately sync change back to wizard_params
+            if annual_spending != st.session_state.wizard_params.get('annual_spending'):
+                st.session_state.wizard_params['annual_spending'] = annual_spending
         else:
             # CAPE-based spending
             st.markdown("**🔧 CAPE Parameters**")
@@ -824,10 +865,19 @@ def step_basics():
                 max_value=45.0,
                 value=st.session_state.wizard_params.get('cape_now', 28.0),
                 step=1.0,
-                help="📊 Market valuation - higher CAPE = lower safe spending",
+                help="📊 **CAPE = Cyclically Adjusted P/E Ratio** (Market Valuation)\n\n"
+                     "What it is: Stock market 'expensiveness' smoothed over 10 years\n"
+                     "• Low CAPE (15-20): Stocks cheap → Higher safe withdrawal rates\n"
+                     "• High CAPE (30-40): Stocks expensive → Lower safe withdrawal rates\n\n"
+                     "How we use it: Sets your initial withdrawal rate\n"
+                     "Formula: Base 1.75% + 0.5 × (1/CAPE)\n\n"
+                     "Current market: ~28-35 (check Robert Shiller's data)\n"
+                     "Historical range: 5 (1920s) to 45+ (dot-com bubble)",
                 key="wiz_cape_now"
             )
-            st.session_state.wizard_params['cape_now'] = cape_now
+            # Immediately sync change back to wizard_params
+            if cape_now != st.session_state.wizard_params.get('cape_now'):
+                st.session_state.wizard_params['cape_now'] = cape_now
 
             # Calculate CAPE-based spending
             cape_withdrawal_rate = (1.75 + 0.5 * (1.0 / cape_now)) / 100
@@ -959,11 +1009,18 @@ def step_allocation():
 
         st.info(f"Cash/Money Market: {cash_pct:.1%} (auto-calculated)")
 
-        # Store values
-        st.session_state.wizard_params['equity_pct'] = equity_pct
-        st.session_state.wizard_params['bonds_pct'] = bonds_pct
-        st.session_state.wizard_params['real_estate_pct'] = real_estate_pct
-        st.session_state.wizard_params['cash_pct'] = cash_pct
+        # Calculate cash percentage
+        cash_pct = max(0, 1.0 - equity_pct - bonds_pct - real_estate_pct)
+
+        # Immediately sync changes back to wizard_params
+        if equity_pct != st.session_state.wizard_params.get('equity_pct'):
+            st.session_state.wizard_params['equity_pct'] = equity_pct
+        if bonds_pct != st.session_state.wizard_params.get('bonds_pct'):
+            st.session_state.wizard_params['bonds_pct'] = bonds_pct
+        if real_estate_pct != st.session_state.wizard_params.get('real_estate_pct'):
+            st.session_state.wizard_params['real_estate_pct'] = real_estate_pct
+        if cash_pct != st.session_state.wizard_params.get('cash_pct'):
+            st.session_state.wizard_params['cash_pct'] = cash_pct
 
         # Glide path option
         st.markdown("### 📉 Age-Based Adjustment")
@@ -974,7 +1031,9 @@ def step_allocation():
             help="Automatically reduce stock allocation as you age",
             key="wiz_glide_path"
         )
-        st.session_state.wizard_params['glide_path'] = glide_path
+        # Immediately sync change back to wizard_params
+        if glide_path != st.session_state.wizard_params.get('glide_path'):
+            st.session_state.wizard_params['glide_path'] = glide_path
 
         if glide_path:
             equity_reduction_pct = st.slider(
@@ -1205,11 +1264,15 @@ def step_market():
             key="wiz_cash_return"
         ) / 100
 
-        # Store values
-        st.session_state.wizard_params['equity_return'] = equity_return
-        st.session_state.wizard_params['bonds_return'] = bonds_return
-        st.session_state.wizard_params['real_estate_return'] = real_estate_return
-        st.session_state.wizard_params['cash_return'] = cash_return
+        # Immediately sync changes back to wizard_params
+        if equity_return != st.session_state.wizard_params.get('equity_return'):
+            st.session_state.wizard_params['equity_return'] = equity_return
+        if bonds_return != st.session_state.wizard_params.get('bonds_return'):
+            st.session_state.wizard_params['bonds_return'] = bonds_return
+        if real_estate_return != st.session_state.wizard_params.get('real_estate_return'):
+            st.session_state.wizard_params['real_estate_return'] = real_estate_return
+        if cash_return != st.session_state.wizard_params.get('cash_return'):
+            st.session_state.wizard_params['cash_return'] = cash_return
 
     with col2:
         st.markdown("### 📊 Volatility (Risk)")
@@ -1254,11 +1317,15 @@ def step_market():
             key="wiz_inflation_rate"
         ) / 100
 
-        # Store values
-        st.session_state.wizard_params['equity_vol'] = equity_vol
-        st.session_state.wizard_params['bonds_vol'] = bonds_vol
-        st.session_state.wizard_params['real_estate_vol'] = real_estate_vol
-        st.session_state.wizard_params['inflation_rate'] = inflation_rate
+        # Immediately sync changes back to wizard_params
+        if equity_vol != st.session_state.wizard_params.get('equity_vol'):
+            st.session_state.wizard_params['equity_vol'] = equity_vol
+        if bonds_vol != st.session_state.wizard_params.get('bonds_vol'):
+            st.session_state.wizard_params['bonds_vol'] = bonds_vol
+        if real_estate_vol != st.session_state.wizard_params.get('real_estate_vol'):
+            st.session_state.wizard_params['real_estate_vol'] = real_estate_vol
+        if inflation_rate != st.session_state.wizard_params.get('inflation_rate'):
+            st.session_state.wizard_params['inflation_rate'] = inflation_rate
 
     # Real returns calculation
     st.markdown("### 🔍 Real Returns (After Inflation)")
@@ -1325,7 +1392,9 @@ def step_ai_setup():
             key="wiz_enable_ai"
         )
         print(f"DEBUG: Checkbox returned: {enable_ai}")
-        st.session_state.wizard_params['enable_ai'] = enable_ai
+        # Immediately sync change back to wizard_params
+        if enable_ai != st.session_state.wizard_params.get('enable_ai'):
+            st.session_state.wizard_params['enable_ai'] = enable_ai
 
         if enable_ai:
             current_api_key = st.session_state.wizard_params.get('gemini_api_key', '')
@@ -1367,7 +1436,9 @@ def step_ai_setup():
                 key="wiz_api_key"
             )
             print(f"DEBUG: Text input returned: {api_key[:10] if api_key else 'empty'}...")
-            st.session_state.wizard_params['gemini_api_key'] = api_key
+            # Immediately sync change back to wizard_params
+            if api_key != st.session_state.wizard_params.get('gemini_api_key'):
+                st.session_state.wizard_params['gemini_api_key'] = api_key
 
             # Model selection
             available_models = RetirementAnalyzer.get_available_models()
@@ -1381,7 +1452,9 @@ def step_ai_setup():
                 help="Gemini 2.5 Pro is the most capable model for retirement analysis",
                 key="wiz_selected_model"
             )
-            st.session_state.wizard_params['gemini_model'] = selected_model
+            # Immediately sync change back to wizard_params
+            if selected_model != st.session_state.wizard_params.get('gemini_model'):
+                st.session_state.wizard_params['gemini_model'] = selected_model
 
     with col2:
         st.markdown("### 🎯 What You'll Get")
@@ -1533,7 +1606,9 @@ def step_taxes():
             help="Choose where you plan to spend most of your retirement",
             key="wiz_selected_state"
         )
-        st.session_state.wizard_params['state'] = selected_state
+        # Immediately sync change back to wizard_params
+        if selected_state != st.session_state.wizard_params.get('state'):
+            st.session_state.wizard_params['state'] = selected_state
 
         filing_status = st.radio(
             "Filing Status",
@@ -1542,7 +1617,9 @@ def step_taxes():
             help="Married Filing Jointly typically has lower rates",
             key="wiz_filing_status"
         )
-        st.session_state.wizard_params['filing_status'] = filing_status
+        # Immediately sync change back to wizard_params
+        if filing_status != st.session_state.wizard_params.get('filing_status'):
+            st.session_state.wizard_params['filing_status'] = filing_status
 
         standard_deduction = st.number_input(
             "Standard Deduction",
@@ -1553,7 +1630,9 @@ def step_taxes():
             help="2025 standard deduction amounts",
             key="wiz_standard_deduction"
         )
-        st.session_state.wizard_params['standard_deduction'] = standard_deduction
+        # Immediately sync change back to wizard_params
+        if standard_deduction != st.session_state.wizard_params.get('standard_deduction'):
+            st.session_state.wizard_params['standard_deduction'] = standard_deduction
 
     with col2:
         st.markdown("### 💰 Tax Bracket Preview")
@@ -1674,7 +1753,9 @@ def step_social_security():
             help="Estimated annual benefit at full retirement age (check ssa.gov)",
             key="wiz_ss_primary_benefit"
         )
-        st.session_state.wizard_params['ss_primary_benefit'] = ss_primary_benefit
+        # Immediately sync change back to wizard_params
+        if ss_primary_benefit != st.session_state.wizard_params.get('ss_primary_benefit'):
+            st.session_state.wizard_params['ss_primary_benefit'] = ss_primary_benefit
 
         ss_primary_start_age = st.slider(
             "Benefit Start Age",
@@ -1684,7 +1765,9 @@ def step_social_security():
             help="62=reduced benefits, 67=full benefits, 70=maximum benefits",
             key="wiz_ss_primary_start_age"
         )
-        st.session_state.wizard_params['ss_primary_start_age'] = ss_primary_start_age
+        # Immediately sync change back to wizard_params
+        if ss_primary_start_age != st.session_state.wizard_params.get('ss_primary_start_age'):
+            st.session_state.wizard_params['ss_primary_start_age'] = ss_primary_start_age
 
         # Calculate adjustment for early/delayed claiming
         if ss_primary_start_age < 67:
@@ -1710,7 +1793,9 @@ def step_social_security():
             help="Leave at 0 if no spouse or spouse has no benefits",
             key="wiz_ss_spousal_benefit"
         )
-        st.session_state.wizard_params['ss_spousal_benefit'] = ss_spousal_benefit
+        # Immediately sync change back to wizard_params
+        if ss_spousal_benefit != st.session_state.wizard_params.get('ss_spousal_benefit'):
+            st.session_state.wizard_params['ss_spousal_benefit'] = ss_spousal_benefit
 
         if ss_spousal_benefit > 0:
             ss_spousal_start_age = st.slider(
@@ -1721,7 +1806,9 @@ def step_social_security():
                 help="Spouse's claiming age",
                 key="wiz_ss_spousal_start_age"
             )
-            st.session_state.wizard_params['ss_spousal_start_age'] = ss_spousal_start_age
+            # Immediately sync change back to wizard_params
+            if ss_spousal_start_age != st.session_state.wizard_params.get('ss_spousal_start_age'):
+                st.session_state.wizard_params['ss_spousal_start_age'] = ss_spousal_start_age
 
     with col2:
         st.markdown("### ⚠️ Social Security Trust Fund Scenarios")
@@ -1741,7 +1828,9 @@ def step_social_security():
             help="Based on 2024 Social Security Trustees Report projections",
             key="wiz_ss_funding_scenario"
         )
-        st.session_state.wizard_params['ss_funding_scenario'] = ss_funding_scenario
+        # Immediately sync change back to wizard_params
+        if ss_funding_scenario != st.session_state.wizard_params.get('ss_funding_scenario'):
+            st.session_state.wizard_params['ss_funding_scenario'] = ss_funding_scenario
 
         if ss_funding_scenario == 'custom':
             custom_reduction = st.slider(
@@ -1753,7 +1842,9 @@ def step_social_security():
                 help="Percentage reduction in benefits",
                 key="wiz_custom_reduction"
             ) / 100
-            st.session_state.wizard_params['ss_custom_reduction'] = custom_reduction
+            # Immediately sync change back to wizard_params
+            if custom_reduction != st.session_state.wizard_params.get('ss_custom_reduction'):
+                st.session_state.wizard_params['ss_custom_reduction'] = custom_reduction
 
             reduction_start_year = st.number_input(
                 "Reduction Start Year",
@@ -1763,7 +1854,9 @@ def step_social_security():
                 help="When benefit cuts begin",
                 key="wiz_reduction_start_year"
             )
-            st.session_state.wizard_params['ss_reduction_start_year'] = reduction_start_year
+            # Immediately sync change back to wizard_params
+            if reduction_start_year != st.session_state.wizard_params.get('ss_reduction_start_year'):
+                st.session_state.wizard_params['ss_reduction_start_year'] = reduction_start_year
 
         # Show total household Social Security income
         st.markdown("### 💰 Total Household SS Income")
@@ -1903,7 +1996,9 @@ def step_guardrails():
             help="If withdrawal rate exceeds this, cut spending",
             key="wiz_lower_guardrail"
         ) / 100
-        st.session_state.wizard_params['lower_guardrail'] = lower_guardrail
+        # Immediately sync change back to wizard_params
+        if lower_guardrail != st.session_state.wizard_params.get('lower_guardrail'):
+            st.session_state.wizard_params['lower_guardrail'] = lower_guardrail
 
         upper_guardrail = st.slider(
             "Upper Guardrail (Withdrawal Rate %)",
@@ -1914,7 +2009,9 @@ def step_guardrails():
             help="If withdrawal rate falls below this, increase spending",
             key="wiz_upper_guardrail"
         ) / 100
-        st.session_state.wizard_params['upper_guardrail'] = upper_guardrail
+        # Immediately sync change back to wizard_params
+        if upper_guardrail != st.session_state.wizard_params.get('upper_guardrail'):
+            st.session_state.wizard_params['upper_guardrail'] = upper_guardrail
 
         spending_adjustment = st.slider(
             "Spending Adjustment %",
@@ -1925,7 +2022,9 @@ def step_guardrails():
             help="How much to adjust spending when guardrails trigger",
             key="wiz_spending_adjustment"
         ) / 100
-        st.session_state.wizard_params['spending_adjustment'] = spending_adjustment
+        # Immediately sync change back to wizard_params
+        if spending_adjustment != st.session_state.wizard_params.get('spending_adjustment'):
+            st.session_state.wizard_params['spending_adjustment'] = spending_adjustment
 
         max_increase = st.slider(
             "Maximum Spending Increase %",
@@ -1936,7 +2035,9 @@ def step_guardrails():
             help="Cap on annual spending increases",
             key="wiz_max_increase"
         ) / 100
-        st.session_state.wizard_params['max_spending_increase'] = max_increase
+        # Immediately sync change back to wizard_params
+        if max_increase != st.session_state.wizard_params.get('max_spending_increase'):
+            st.session_state.wizard_params['max_spending_increase'] = max_increase
 
         max_decrease = st.slider(
             "Maximum Spending Decrease %",
@@ -1947,7 +2048,9 @@ def step_guardrails():
             key="wiz_max_decrease",
             help="Cap on annual spending decreases"
         ) / 100
-        st.session_state.wizard_params['max_spending_decrease'] = max_decrease
+        # Immediately sync change back to wizard_params
+        if max_decrease != st.session_state.wizard_params.get('max_spending_decrease'):
+            st.session_state.wizard_params['max_spending_decrease'] = max_decrease
 
     with col2:
         st.markdown("### 🏠 Spending Bounds")
@@ -1961,7 +2064,9 @@ def step_guardrails():
             help="💰 **Minimum annual spending** - Never go below this amount (real dollars)\n\n• Essential expenses coverage\n• Healthcare and housing minimums\n• Only applies until Floor End Year",
             key="wiz_spending_floor"
         )
-        st.session_state.wizard_params['spending_floor_real'] = spending_floor
+        # Immediately sync change back to wizard_params
+        if spending_floor != st.session_state.wizard_params.get('spending_floor_real'):
+            st.session_state.wizard_params['spending_floor_real'] = spending_floor
 
         spending_ceiling = st.number_input(
             "Spending Ceiling ($)",
@@ -1972,7 +2077,9 @@ def step_guardrails():
             help="🏠 **Maximum annual spending** - Never exceed this amount (real dollars)\n\n• Lifestyle cap or practical limit\n• Applies throughout retirement\n• Prevents excessive withdrawals",
             key="wiz_spending_ceiling"
         )
-        st.session_state.wizard_params['spending_ceiling_real'] = spending_ceiling
+        # Immediately sync change back to wizard_params
+        if spending_ceiling != st.session_state.wizard_params.get('spending_ceiling_real'):
+            st.session_state.wizard_params['spending_ceiling_real'] = spending_ceiling
 
         floor_end_year = st.number_input(
             "Floor End Year",
@@ -1983,7 +2090,9 @@ def step_guardrails():
             help="📅 **When spending floor stops applying**\n\n• Typical: First 15-20 years of retirement\n• After this year, spending can drop below floor\n• Reflects reduced needs in later retirement",
             key="wiz_floor_end_year"
         )
-        st.session_state.wizard_params['floor_end_year'] = floor_end_year
+        # Immediately sync change back to wizard_params
+        if floor_end_year != st.session_state.wizard_params.get('floor_end_year'):
+            st.session_state.wizard_params['floor_end_year'] = floor_end_year
         st.markdown("### 📊 How Guardrails Work")
 
         # Example scenarios
@@ -2280,7 +2389,9 @@ def step_advanced():
             help="Add college tuition and expenses to your plan",
             key="wiz_college_enabled"
         )
-        st.session_state.wizard_params['college_enabled'] = college_enabled
+        # Immediately sync change back to wizard_params
+        if college_enabled != st.session_state.wizard_params.get('college_enabled'):
+            st.session_state.wizard_params['college_enabled'] = college_enabled
 
         if college_enabled:
             college_amount = st.number_input(
@@ -2292,7 +2403,9 @@ def step_advanced():
                 help="Annual cost per student",
                 key="wiz_college_amount"
             )
-            st.session_state.wizard_params['college_amount'] = college_amount
+            # Immediately sync change back to wizard_params
+            if college_amount != st.session_state.wizard_params.get('college_amount'):
+                st.session_state.wizard_params['college_amount'] = college_amount
 
             college_years = st.slider(
                 "Total College Years",
@@ -2302,7 +2415,9 @@ def step_advanced():
                 help="Total years across all children",
                 key="wiz_college_years"
             )
-            st.session_state.wizard_params['college_years'] = college_years
+            # Immediately sync change back to wizard_params
+            if college_years != st.session_state.wizard_params.get('college_years'):
+                st.session_state.wizard_params['college_years'] = college_years
 
             college_start_year = st.number_input(
                 "College Start Year",
@@ -2311,7 +2426,9 @@ def step_advanced():
                 value=st.session_state.wizard_params.get('college_start_year', 2032),
                 key="wiz_college_start_year"
             )
-            st.session_state.wizard_params['college_start_year'] = college_start_year
+            # Immediately sync change back to wizard_params
+            if college_start_year != st.session_state.wizard_params.get('college_start_year'):
+                st.session_state.wizard_params['college_start_year'] = college_start_year
 
         st.markdown("### 🏠 Inheritance")
 
@@ -2324,7 +2441,11 @@ def step_advanced():
             help="One-time inheritance expected during retirement",
             key="wiz_inheritance_amount"
         )
-        st.session_state.wizard_params['inheritance_amount'] = inheritance_amount
+
+        # Immediately sync change back to wizard_params to keep them in sync
+        if inheritance_amount != st.session_state.wizard_params.get('inheritance_amount'):
+            st.session_state.wizard_params['inheritance_amount'] = inheritance_amount
+            print(f"DEBUG [inheritance_amount widget]: Synced change to wizard_params: {inheritance_amount}")
 
         if inheritance_amount > 0:
             inheritance_year = st.number_input(
@@ -2334,7 +2455,9 @@ def step_advanced():
                 value=st.session_state.wizard_params.get('inheritance_year', 2040),
                 key="wiz_inheritance_year"
             )
-            st.session_state.wizard_params['inheritance_year'] = inheritance_year
+            # Immediately sync change back to wizard_params
+            if inheritance_year != st.session_state.wizard_params.get('inheritance_year'):
+                st.session_state.wizard_params['inheritance_year'] = inheritance_year
 
     with col2:
         st.markdown("### 📊 Market Scenarios")
@@ -2355,7 +2478,9 @@ def step_advanced():
             help="Test your plan against different market conditions",
             key="wiz_market_regime"
         )
-        st.session_state.wizard_params['market_regime'] = market_regime
+        # Immediately sync change back to wizard_params
+        if market_regime != st.session_state.wizard_params.get('market_regime'):
+            st.session_state.wizard_params['market_regime'] = market_regime
 
         st.markdown("### 🔢 Simulation Settings")
 
@@ -2386,10 +2511,19 @@ def step_advanced():
             max_value=45.0,
             value=st.session_state.wizard_params.get('cape_now', 28.0),
             step=1.0,
-            help="📊 **Market valuation metric** - Cyclically Adjusted PE Ratio\n\nUsed to set initial withdrawal rate: Base Rate = 1.75% + 0.5 × (1/CAPE)\n\n• Low CAPE (~15): Higher safe withdrawal\n• High CAPE (~35+): Lower safe withdrawal\n• Historical average: ~20-25\n• Current market: Check Robert Shiller's data",
+            help="📊 **CAPE = Cyclically Adjusted P/E Ratio** (Market Valuation)\n\n"
+                 "What it is: Stock market 'expensiveness' smoothed over 10 years\n"
+                 "• Low CAPE (15-20): Stocks cheap → Higher safe withdrawal rates\n"
+                 "• High CAPE (30-40): Stocks expensive → Lower safe withdrawal rates\n\n"
+                 "How we use it: Sets your initial withdrawal rate\n"
+                 "Formula: Base 1.75% + 0.5 × (1/CAPE)\n\n"
+                 "Current market: ~28-35 (check Robert Shiller's data)\n"
+                 "Historical range: 5 (1920s) to 45+ (dot-com bubble)",
             key="wiz_cape_now_final"
         )
-        st.session_state.wizard_params['cape_now'] = cape_now
+        # Immediately sync change back to wizard_params
+        if cape_now != st.session_state.wizard_params.get('cape_now'):
+            st.session_state.wizard_params['cape_now'] = cape_now
 
     # Summary of advanced settings
     st.markdown("### 📋 Advanced Settings Summary")

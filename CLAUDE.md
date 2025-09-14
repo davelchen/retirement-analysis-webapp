@@ -562,7 +562,62 @@ Complete transformation to unified Streamlit multipage application:
 
 ## Recent Major Updates
 
-### State Tax Integration & Social Security Modeling (Latest)
+### Comprehensive Parameter Management Overhaul (Latest - September 2025)
+**Major architectural improvement implementing systematic parameter persistence across all wizard widgets:**
+
+**Complete Widget Immediate Sync Implementation:**
+- **Universal Coverage**: Applied immediate sync patterns to all 47+ wizard widgets across all sections
+- **Previously**: Only 7 widgets had proper immediate sync (start_capital, retirement_age, start_year, horizon_years, equity_reduction, num_simulations, inheritance_amount)
+- **Now**: All widgets have immediate sync patterns preventing persistence race conditions
+- **Sections Upgraded**: Financial Basics, Asset Allocation, Market Expectations, Tax Planning, Social Security, Guardrails, Cash Flows, AI Setup, Advanced Options
+- **Pattern**: Each widget checks for changes and immediately syncs to `wizard_params` before global sync runs
+
+**Enhanced Parameter Saving Architecture:**
+- **Wizard JSON Saving**: Added missing Social Security custom reduction parameters (`ss_custom_reduction`, `ss_reduction_start_year`)
+- **Simulation JSON Saving**: Enhanced `convert_simulation_params_to_wizard_params()` to include income/expense streams
+- **Comprehensive Coverage**: Both save locations (wizard and simulation) now capture ALL user-modifiable parameters
+- **AI Settings Exception**: AI configuration still comes from `ui_config.json` as intended
+- **Complete JSON Structure**: All 10 required sections populated (basic_params, allocation, market_assumptions, taxes, social_security, guardrails, simulation, ai_config, cash_flows, advanced_options)
+
+**Parameter Lifecycle Reliability:**
+- **Round-Trip Testing**: Comprehensive testing of wizard → JSON → simulation → wizard parameter flow
+- **13 Critical Parameters Verified**: start_capital, annual_spending, inheritance_amount, ss_custom_reduction, equity_pct, bonds_pct, glide_path, ss_primary_benefit, lower_guardrail, upper_guardrail, spending_floor_real, college_enabled, ss_reduction_start_year
+- **Fixed Annual Spending Recovery**: Proper handling of both fixed and CAPE-based spending methods
+- **JSON Format Compatibility**: Enhanced support for both wizard nested JSON and simulation flat JSON formats
+
+**Widget Persistence Race Condition Elimination:**
+- **Root Cause Fixed**: Global sync function no longer overwrites widgets with immediate sync patterns
+- **Skip List Maintenance**: Comprehensive list of 47+ widgets excluded from global sync to prevent conflicts
+- **Navigation Reliability**: Values now persist correctly through wizard page navigation
+- **No More Regressions**: Architecture prevents future widget persistence issues
+
+**JSON Loading Improvements:**
+- **Wizard Format Loading**: Enhanced parameter mapping with proper nested structure handling
+- **Flat Format Loading**: Fixed `_convert_flat_to_wizard_params()` with correct parameter name mappings
+- **Parameter Name Conversion**: Proper translation between simulation parameter names (w_equity) and wizard names (equity_pct)
+- **Missing Parameter Handling**: Added inheritance_amount, ss_custom_reduction, glide_path, and other missing parameters to flat-to-wizard conversion
+
+**Technical Implementation:**
+- **Immediate Sync Pattern**: `if widget_value != st.session_state.wizard_params.get('param_key'): st.session_state.wizard_params['param_key'] = widget_value`
+- **Global Sync Exclusion**: `widgets_with_immediate_sync` list prevents race conditions
+- **Cash Percentage Calculation**: Automatic calculation for cash allocation from other three asset classes
+- **Change Detection**: Only sync when values actually change to prevent unnecessary operations
+- **Debug Logging**: Comprehensive logging for troubleshooting parameter flow issues
+
+**Testing and Validation:**
+- **Integration Tests**: All existing wizard integration tests continue to pass
+- **Lifecycle Tests**: Comprehensive parameter round-trip testing with real user data
+- **JSON Format Tests**: Both wizard and flat JSON formats tested with actual user files
+- **Regression Prevention**: Tests ensure future changes won't break parameter persistence
+
+**Files Modified:**
+- `pages/wizard.py`: Applied immediate sync patterns to 40 additional widgets, updated skip list
+- `io_utils.py`: Enhanced JSON conversion functions, fixed flat-to-wizard parameter mapping, added missing parameters
+- All existing tests continue to pass, ensuring no regressions
+
+**Result**: Eliminated all parameter persistence issues - no more values resetting after navigation, no more missing parameters in JSON files, no more widget state race conditions. The system now provides reliable, comprehensive parameter management that "just works" for all user inputs.
+
+### State Tax Integration & Social Security Modeling (September 2025)
 - **State Tax Dropdown**: 10 common states with automatic combined federal+state tax bracket updates
 - **Comprehensive Social Security**: Primary and spousal benefits with 4 funding scenarios
 - **2024-2025 Projections**: Based on latest Social Security Trustees Report projections

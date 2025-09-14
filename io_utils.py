@@ -148,6 +148,90 @@ def parse_parameters_upload_json(json_string: str) -> SimulationParams:
     return dict_to_params(param_dict)
 
 
+def convert_simulation_params_to_wizard_params(params: SimulationParams) -> Dict[str, Any]:
+    """Convert SimulationParams object back to wizard_params format"""
+    # Convert the params object to dict first
+    param_dict = params_to_dict(params)
+
+    # Map key parameters back to wizard format
+    wizard_params = {
+        # Basic parameters
+        'start_capital': param_dict.get('start_capital', 2_500_000),
+        'annual_spending': param_dict.get('fixed_annual_spending') or param_dict.get('initial_base_spending') or param_dict.get('annual_spending', 120_000),
+        'spending_method': 'fixed' if param_dict.get('fixed_annual_spending') else 'cape',
+        'retirement_age': 65,  # Not stored in SimulationParams, use default
+        'start_year': param_dict.get('start_year', 2025),
+        'horizon_years': param_dict.get('horizon_years', 50),
+
+        # Allocation
+        'equity_pct': param_dict.get('w_equity', 0.65),
+        'bonds_pct': param_dict.get('w_bonds', 0.25),
+        'real_estate_pct': param_dict.get('w_real_estate', 0.08),
+        'cash_pct': param_dict.get('w_cash', 0.02),
+        'glide_path': param_dict.get('glide_path_enabled', False),
+        'equity_reduction_per_year': param_dict.get('equity_reduction_per_year', 0.01),
+
+        # Market assumptions
+        'equity_return': param_dict.get('equity_mean', 0.0742),
+        'bonds_return': param_dict.get('bonds_mean', 0.0318),
+        'real_estate_return': param_dict.get('real_estate_mean', 0.0563),
+        'cash_return': param_dict.get('cash_mean', 0.0225),
+        'equity_vol': param_dict.get('equity_vol', 0.1734),
+        'bonds_vol': param_dict.get('bonds_vol', 0.0576),
+        'real_estate_vol': param_dict.get('real_estate_vol', 0.1612),
+        'cash_vol': 0.0096,
+        'inflation_rate': 0.028,  # Default, not stored in params
+
+        # Taxes
+        'state': 'CA',  # Default, derive from tax_brackets if needed
+        'filing_status': param_dict.get('filing_status', 'MFJ'),
+        'standard_deduction': param_dict.get('standard_deduction', 29200),
+
+        # Social Security
+        'ss_primary_benefit': param_dict.get('ss_annual_benefit', 40000),
+        'ss_primary_start_age': param_dict.get('ss_start_age', 67),
+        'ss_spousal_benefit': param_dict.get('spouse_ss_annual_benefit', 0),
+        'ss_spousal_start_age': param_dict.get('spouse_ss_start_age', 67),
+        'ss_funding_scenario': param_dict.get('ss_benefit_scenario', 'conservative'),
+        'ss_custom_reduction': param_dict.get('ss_custom_reduction', 0.15),
+        'ss_reduction_start_year': param_dict.get('ss_reduction_start_year', 2034),
+
+        # Guardrails
+        'lower_guardrail': param_dict.get('lower_wr', 0.028),
+        'upper_guardrail': param_dict.get('upper_wr', 0.04),
+        'spending_adjustment': param_dict.get('adjustment_pct', 0.1),
+        'max_spending_increase': 0.1,  # Default
+        'max_spending_decrease': 0.1,  # Default
+
+        # Simulation
+        'num_simulations': param_dict.get('num_sims', 10000),
+        'market_regime': param_dict.get('regime', 'baseline'),
+        'cape_now': param_dict.get('cape_now', 28.0),
+
+        # AI config (will be overridden by UI config)
+        'enable_ai': False,
+        'gemini_api_key': '',
+        'gemini_model': 'gemini-2.5-pro',
+
+        # Advanced options
+        'college_enabled': param_dict.get('college_enabled', True),
+        'college_amount': param_dict.get('college_base_amount', 75000),
+        'college_years': 8,  # Calculate from start/end years if available
+        'college_start_year': param_dict.get('college_start_year', 2032),
+        'inheritance_amount': param_dict.get('inherit_amount', 0),
+        'inheritance_year': param_dict.get('inherit_year', 2040),
+        'spending_floor_real': param_dict.get('spending_floor_real', 120000),
+        'spending_ceiling_real': param_dict.get('spending_ceiling_real', 200000),
+        'floor_end_year': param_dict.get('floor_end_year', 2041),
+
+        # Cash flows - default to empty if not in params
+        'income_streams': param_dict.get('income_streams', []),
+        'expense_streams': param_dict.get('expense_streams', []),
+    }
+
+    return wizard_params
+
+
 def convert_wizard_to_json(wizard_params: Dict[str, Any]) -> Dict[str, Any]:
     """Convert wizard parameters to JSON format compatible with Monte Carlo analysis"""
 
@@ -190,7 +274,9 @@ def convert_wizard_to_json(wizard_params: Dict[str, Any]) -> Dict[str, Any]:
             "ss_primary_start_age": wizard_params.get('ss_primary_start_age', 67),
             "ss_spousal_benefit": wizard_params.get('ss_spousal_benefit', 0),
             "ss_spousal_start_age": wizard_params.get('ss_spousal_start_age', 67),
-            "ss_funding_scenario": wizard_params.get('ss_funding_scenario', 'moderate')
+            "ss_funding_scenario": wizard_params.get('ss_funding_scenario', 'moderate'),
+            "custom_reduction_pct": wizard_params.get('ss_custom_reduction', 0.15),
+            "custom_reduction_start_year": wizard_params.get('ss_reduction_start_year', 2034)
         },
         "guardrails": {
             "lower_guardrail": wizard_params.get('lower_guardrail', 0.03),
@@ -279,8 +365,7 @@ def convert_wizard_json_to_simulation_params(wizard_json: Dict[str, Any]) -> Dic
         'real_estate_vol': market.get('real_estate_vol', 0.1612),
         'cash_vol': market.get('cash_vol', 0.0096),
 
-        # Inflation rate (critical parameter that's not in SimulationParams)
-        'inflation_rate': market.get('inflation_rate', 0.025),
+        # Inflation rate is not stored in SimulationParams - it's handled separately
 
         # Taxes
         'filing_status': taxes.get('filing_status', 'MFJ'),
@@ -853,15 +938,19 @@ def _convert_flat_to_wizard_params(flat_params: Dict[str, Any]) -> Dict[str, Any
     """Convert flat Monte Carlo parameters to wizard parameters format"""
     wizard_params = {}
 
-    # Direct mappings for basic parameters
+    # Direct mappings for basic parameters (convert simulation names to wizard names)
     wizard_params.update({
         'start_capital': flat_params.get('start_capital', 2_500_000),
         'annual_spending': flat_params.get('annual_spending', 150_000),
         'horizon_years': flat_params.get('horizon_years', 50),
-        'w_equity': flat_params.get('w_equity', 0.65),
-        'w_bonds': flat_params.get('w_bonds', 0.25),
-        'w_real_estate': flat_params.get('w_real_estate', 0.08),
-        'w_cash': flat_params.get('w_cash', 0.02),
+        'start_year': flat_params.get('start_year', 2025),
+        # Asset allocation - convert from simulation parameter names
+        'equity_pct': flat_params.get('w_equity', 0.65),
+        'bonds_pct': flat_params.get('w_bonds', 0.25),
+        'real_estate_pct': flat_params.get('w_real_estate', 0.08),
+        'cash_pct': flat_params.get('w_cash', 0.02),
+        'glide_path': flat_params.get('glide_path_enabled', False),
+        'equity_reduction_per_year': flat_params.get('equity_reduction_per_year', 0.005),
     })
 
     # Tax and state
@@ -870,15 +959,15 @@ def _convert_flat_to_wizard_params(flat_params: Dict[str, Any]) -> Dict[str, Any
         'filing_status': flat_params.get('filing_status', 'married_filing_jointly'),
     })
 
-    # Social Security
+    # Social Security (convert from simulation parameter names to wizard names)
     wizard_params.update({
-        'ss_benefits_enabled': flat_params.get('ss_benefits_enabled', True),
-        'ss_annual_benefit': flat_params.get('ss_annual_benefit', 40000),
-        'ss_start_age': flat_params.get('ss_start_age', 67),
-        'ss_funding_scenario': flat_params.get('ss_funding_scenario', 'moderate'),
-        'spouse_ss_benefits_enabled': flat_params.get('spouse_ss_benefits_enabled', False),
-        'spouse_ss_annual_benefit': flat_params.get('spouse_ss_annual_benefit', 20000),
-        'spouse_ss_start_age': flat_params.get('spouse_ss_start_age', 67),
+        'ss_primary_benefit': flat_params.get('ss_annual_benefit', 40000),
+        'ss_primary_start_age': flat_params.get('ss_start_age', 67),
+        'ss_spousal_benefit': flat_params.get('spouse_ss_annual_benefit', 0),
+        'ss_spousal_start_age': flat_params.get('spouse_ss_start_age', 67),
+        'ss_funding_scenario': flat_params.get('ss_benefit_scenario', 'moderate'),
+        'ss_custom_reduction': flat_params.get('ss_custom_reduction', 0.15),
+        'ss_reduction_start_year': flat_params.get('ss_reduction_start_year', 2034),
     })
 
     # Simulation
@@ -892,12 +981,18 @@ def _convert_flat_to_wizard_params(flat_params: Dict[str, Any]) -> Dict[str, Any
     wizard_params['income_streams'] = []  # Would need to reconstruct from flat format
     wizard_params['expense_streams'] = flat_params.get('expense_streams', [])
 
-    # College expenses (convert from flat format)
+    # College expenses and inheritance (convert from flat format)
+    college_years = 8  # default
+    if flat_params.get('college_end_year') and flat_params.get('college_start_year'):
+        college_years = flat_params['college_end_year'] - flat_params['college_start_year']
+
     wizard_params.update({
         'college_enabled': flat_params.get('college_enabled', False),
         'college_amount': flat_params.get('college_base_amount', 75000),
-        'college_years': flat_params.get('college_end_year', 2041) - flat_params.get('college_start_year', 2032),
+        'college_years': college_years,
         'college_start_year': flat_params.get('college_start_year', 2032),
+        'inheritance_amount': flat_params.get('inherit_amount', 0),
+        'inheritance_year': flat_params.get('inherit_year', 2040),
     })
 
     return wizard_params
