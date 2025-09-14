@@ -1729,7 +1729,7 @@ def display_downloads():
     
     with col2:
         # Percentile bands CSV
-        years = np.arange(st.session_state.start_year, st.session_state.start_year + st.session_state.horizon_years + 1)
+        years = np.arange(st.session_state.start_year + 1, st.session_state.start_year + st.session_state.horizon_years + 1)
         percentiles = calculate_percentiles(results.wealth_paths)
         
         currency_suffix = st.session_state.currency_view.lower()
