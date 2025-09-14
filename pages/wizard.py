@@ -1794,7 +1794,7 @@ def step_social_security():
             min_value=62,
             max_value=70,
             value=st.session_state.wizard_params.get('ss_primary_start_age', 67),
-            help="62=reduced benefits, 67=full benefits, 70=maximum benefits",
+            help="🎂 **Age to start collecting Social Security** (can be different from retirement age)\n\n• **Age 62**: Early claiming, ~25% benefit reduction\n• **Age 67**: Full retirement age, 100% of benefit\n• **Age 70**: Maximum benefits, ~32% increase\n\n💡 **Common strategies**:\n• Retire at 65, start SS at 67 (bridge gap with portfolio)\n• Retire at 67, start SS immediately (full benefits)\n• Retire at 62, delay SS to 70 (maximize lifetime benefits)",
             key="wiz_ss_primary_start_age"
         )
         # Immediately sync change back to wizard_params
@@ -1835,7 +1835,7 @@ def step_social_security():
                 min_value=62,
                 max_value=70,
                 value=st.session_state.wizard_params.get('ss_spousal_start_age', 67),
-                help="Spouse's claiming age",
+                help="🎂 **Age when spouse starts collecting Social Security**\n\n• **Age 62**: Early claiming with benefit reduction\n• **Age 67**: Full retirement age benefits\n• **Age 70**: Maximum delayed retirement credits\n\n💡 **Coordination tip**: Spouses can claim at different ages to optimize household Social Security income.",
                 key="wiz_ss_spousal_start_age"
             )
             # Immediately sync change back to wizard_params
@@ -2495,11 +2495,13 @@ def step_advanced():
         st.markdown("### 📊 Market Scenarios")
 
         market_scenarios = {
-            'baseline': 'Baseline: Historical average returns',
-            'recession_early': 'Early Recession: Bad returns years 1-3',
-            'recession_late': 'Late Recession: Bad returns years 15-17',
-            'inflation_shock': 'Inflation Shock: High inflation scenario',
-            'long_bear': 'Extended Bear Market: Prolonged low returns'
+            'baseline': 'Baseline: Expected returns throughout',
+            'recession_recover': 'Recession/Recover: Early recession (-15% Yr1, 0% Yr2)',
+            'grind_lower': 'Grind Lower: Poor returns first 10 years',
+            'late_recession': 'Late Recession: Recession in years 10-12',
+            'inflation_shock': 'Inflation Shock: High inflation years 3-7',
+            'long_bear': 'Long Bear: Extended bear market years 5-15',
+            'tech_bubble': 'Tech Bubble: Boom then bust pattern'
         }
 
         market_regime = st.selectbox(

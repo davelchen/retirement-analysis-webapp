@@ -4,7 +4,7 @@ A comprehensive **Streamlit multipage application** for retirement planning feat
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-Educational-green.svg)
-![Tests](https://img.shields.io/badge/tests-255%2B%20passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-256%20passed-brightgreen.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.49+-red.svg)
 
 ## 🚀 Quick Start
@@ -27,9 +27,9 @@ streamlit run main.py
 **Open your browser to `http://localhost:8501`**
 
 ### 🧭 Navigation Options
-- **Main App**: http://localhost:8501 (choose your starting point)
-- **Setup Wizard**: http://localhost:8501/Wizard (guided parameter configuration)
-- **Monte Carlo Analysis**: http://localhost:8501/Monte_Carlo_Analysis (advanced simulations)
+- **Main Landing Page**: http://localhost:8501 (choose your starting point)
+- **Setup Wizard**: Navigate via sidebar or click "Wizard" page
+- **Monte Carlo Analysis**: Navigate via sidebar or click "Monte_Carlo_Analysis" page
 
 ## ✨ Key Features
 
@@ -56,18 +56,23 @@ streamlit run main.py
 - **Standard deduction** and filing status support
 - **Real-time tax impact** analysis in projections
 
-### 🏛️ **Social Security Integration**
+### 🏛️ **Enhanced Social Security Integration**
+- **Retirement vs SS age distinction** - retire at any age, start SS separately (62-70)
 - **Comprehensive modeling** with primary and spousal benefits
 - **4 funding scenarios** based on 2024-2025 Trustees Report projections
 - **Trust fund timeline** modeling 2034 depletion with benefit cuts
-- **Age flexibility** - start benefits anywhere from 62-70
-- **Tax-aware integration** - SS income reduces portfolio withdrawals
+- **Year-by-year visibility** - SS income appears in detailed tables and CSV exports
+- **Cash flow integration** - SS income included in waterfall charts and summary statistics
+- **Tax-aware integration** - SS income reduces portfolio withdrawal requirements
 
 ### 📊 **Rich Interactive UI**
-- **Comprehensive tooltips** for every parameter with usage guidance
-- **Dynamic expense management** - add/remove one-time expenses
-- **Multiple income streams** with flexible timing
-- **Real-time validation** and helpful error messages
+- **Comprehensive tooltips** for every parameter with usage guidance and examples
+- **Editable retirement age** - displayed in sidebar with real-time SS timing updates
+- **Precision decimal inputs** - guardrails support exact values like 0.028
+- **Dynamic expense management** - add/remove multi-year expense streams
+- **Multiple income streams** with flexible timing and duration
+- **Smart parameter validation** - prevents min/max errors when changing dates
+- **Real-time feedback** and helpful error messages with recovery suggestions
 
 ### 📈 **Professional Visualizations**
 - **Interactive Plotly charts** with hover details
@@ -120,20 +125,25 @@ streamlit run main.py
 
 ## 🆕 What's New (September 2025)
 
-### 🔄 **Comprehensive Parameter Management Overhaul**
-- **Universal Widget Persistence**: All 47+ wizard widgets now maintain values through navigation
-- **Eliminated Race Conditions**: Complete fix for widget persistence issues that caused value resets
-- **Enhanced JSON Saving**: Both wizard and simulation save functions capture ALL parameters
-- **Robust Parameter Loading**: Support for both wizard nested JSON and simulation flat JSON formats
+### 🏛️ **Major Social Security Implementation Overhaul**
+- **Retirement vs SS Age Distinction**: Fixed hardcoded age=65 assumption - now uses actual retirement age for proper timing
+- **Year-by-Year SS Visibility**: SS income appears in detailed tables, CSV exports, and cash flow charts
+- **Enhanced Age Tooltips**: Clear explanations distinguishing retirement age from SS start age with strategy examples
+- **Summary Statistics**: Total SS income metrics displayed in simulation results
+- **Early Retirement Support**: Validated for scenarios like retire-at-45, SS-at-62 with proper 17-year delay
+
+### 📊 **UI Parameter Improvements**
+- **Editable Retirement Age**: Added to Monte Carlo sidebar with real-time SS timing updates
+- **Precision Decimal Inputs**: Fixed guardrail inputs to support exact values like 0.028 without formatting issues
+- **Smart Date Validation**: Prevents min/max errors when changing start year by using dynamic bounds
+- **Market Regime Consistency**: Synchronized regime names between wizard and simulation (recession_recover, late_recession, etc.)
+- **Real Estate Default**: Changed to disabled by default for cleaner user experience
+
+### 🔄 **Parameter Management & Architecture**
+- **Universal Widget Persistence**: All 47+ wizard widgets maintain values through navigation
+- **Enhanced JSON Loading**: Support for both wizard nested JSON and simulation flat JSON formats
 - **Round-Trip Reliability**: Complete parameter lifecycle testing ensures data integrity
 - **Age-Aware Validation**: Smart horizon recommendations based on retirement age and longevity planning
-- **No More Partial Fixes**: Systematic architectural solution prevents future persistence issues
-
-### 🎨 **User Experience Improvements**
-- **Consistent Parameter Preservation**: Inheritance amounts, Social Security settings, and all other inputs persist correctly
-- **Comprehensive Tooltips**: Enhanced CAPE ratio explanations and parameter guidance
-- **JSON Format Consistency**: Unified JSON structure between wizard and simulation save functions
-- **Immediate Sync Patterns**: Real-time parameter synchronization prevents data loss
 
 ### JSON Compatibility Layer
 - **Auto-detection**: Wizard JSON (nested) vs Native JSON (flat) formats
@@ -215,7 +225,7 @@ The application includes a **realistic California family scenario** with:
 
 ## 🧪 Testing & Validation
 
-**255+ comprehensive unit tests** covering all major functionality:
+**256 comprehensive unit tests** covering all major functionality:
 
 ```bash
 # Run complete test suite

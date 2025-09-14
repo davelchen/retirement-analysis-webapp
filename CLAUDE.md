@@ -56,8 +56,14 @@ def solve_gross_withdrawal(net_need, other_taxable_income, standard_deduction, t
 - **No-tax states**: TX/FL/WA/NV using federal-only rates (10-24%)
 - **Moderate states**: PA/OH/IL with intermediate combined rates
 
-### Social Security Modeling
-Comprehensive Social Security integration with projected trust fund scenarios based on 2024-2025 Trustees Reports:
+### Enhanced Social Security Modeling
+Comprehensive Social Security integration with proper retirement vs SS age handling and full year-by-year visibility:
+
+**Major Architecture Improvements (September 2025)**:
+- **Retirement Age Independence**: Fixed hardcoded age=65 assumption - now uses actual `retirement_age` parameter
+- **Year-by-Year Tracking**: SS income appears in detailed tables, CSV exports, and summary statistics
+- **Cash Flow Integration**: SS income included in waterfall charts and simulation results display
+- **Enhanced UI Guidance**: Clear tooltips distinguishing retirement age from SS start age with strategy examples
 
 **Funding Scenarios**:
 - **Conservative (19% cut)**: Full benefit reduction starting 2034 per current law
@@ -65,16 +71,19 @@ Comprehensive Social Security integration with projected trust fund scenarios ba
 - **Optimistic (full reform)**: Benefits maintained through tax increases
 - **Custom**: User-defined reduction percentage and timing
 
-**Key Features**:
+**Technical Implementation**:
 - **Age flexibility**: Start benefits ages 62-70 with proper actuarial adjustments
 - **Spousal benefits**: Separate tracking for spouse's Social Security income
 - **Trust fund modeling**: Projects 2034 depletion timeline with scenario-based cuts
 - **Tax integration**: SS income reduces portfolio withdrawal requirements
 - **Real-dollar calculations**: Benefits subject to same funding scenarios
+- **Early retirement support**: Validated for retire-at-45, SS-at-62 scenarios with 17+ year delays
 
 ```python
-def calculate_social_security_benefit(year, start_year, annual_benefit, scenario,
+def calculate_social_security_benefit(year, start_year, retirement_age, annual_benefit, scenario,
                                     custom_reduction, reduction_start_year, start_age):
+    # Calculate age based on actual retirement age, not hardcoded 65
+    age_at_year = retirement_age + (year - start_year)
     # Age-based eligibility with funding scenario adjustments
 ```
 
@@ -190,9 +199,9 @@ streamlit run main.py
 ```
 
 ### Page Navigation
-- **Main App**: http://localhost:8501
-- **Setup Wizard**: http://localhost:8501/Wizard
-- **Monte Carlo Analysis**: http://localhost:8501/Monte_Carlo_Analysis
+- **Main Landing Page**: http://localhost:8501 (choose your starting point)
+- **Setup Wizard**: Navigate via sidebar or click "Wizard" page
+- **Monte Carlo Analysis**: Navigate via sidebar or click "Monte_Carlo_Analysis" page
 
 ### Testing
 ```bash
@@ -398,6 +407,41 @@ streams = getattr(params, 'income_streams', []) or []  # Handle None gracefully
 **Technical Implementation:**
 - **Stream Architecture**: Both income and expense streams use identical `start_year` + `years` duration model
 - **Parameter Persistence**: All stream configurations properly serialized/deserialized in JSON format
+
+### Social Security Age Independence & UI Improvements (September 2025)
+**Major architectural fix for retirement age vs Social Security start age handling:**
+
+**Core Issue Resolution:**
+- **Problem**: Social Security calculations hardcoded `age = 65 + (year - start_year)` assumption, ignoring user's actual retirement age
+- **Impact**: Early retirees saw SS starting 2 years after retirement instead of at proper age (e.g., retire at 45, SS at 67 = 22 years)
+- **Root Cause**: `tax_utils.py:57` hardcoded retirement age, `SimulationParams` missing `retirement_age` field, parameter conversion gaps
+
+**Architecture Changes:**
+- **Added `retirement_age` parameter**: Updated `SimulationParams` dataclass with `retirement_age: int = 65`
+- **Fixed age calculation**: `tax_utils.py` - `age_at_year = retirement_age + (year - start_year)` instead of hardcoded 65
+- **Parameter flow**: Added `retirement_age` to Monte Carlo `get_current_params()` and wizard JSON conversion
+- **Deterministic fix**: Updated `deterministic.py` to pass `retirement_age` parameter to SS calculations
+
+**User Interface Improvements:**
+- **Editable retirement age**: Added to Monte Carlo sidebar as number input (30-75, default 65)
+- **Enhanced tooltips**: Clear distinction between retirement age and SS start age with strategy examples
+- **Text input guardrails**: Fixed Streamlit decimal issues by using `st.text_input` with validation for precise 0.028 values
+- **Smart date validation**: Dynamic `min_value` calculation prevents errors when changing start year
+
+**Market Regime Synchronization:**
+- **Problem**: Wizard used `recession_early`/`recession_late`, Monte Carlo used `recession_recover`/`late_recession`
+- **Solution**: Updated wizard to use identical regime names as Monte Carlo for seamless parameter transfer
+- **Names**: `baseline`, `recession_recover`, `grind_lower`, `late_recession`, `inflation_shock`, `long_bear`, `tech_bubble`
+
+**Data Visibility Enhancements:**
+- **Year-by-year tables**: Added `ss_income` column to simulation details and CSV exports
+- **Cash flow charts**: SS income appears in waterfall visualizations
+- **Summary statistics**: Total SS income metric displayed in simulation results
+
+**Testing & Validation:**
+- **Early retirement test**: Validated retire-at-45, SS-at-62 scenario with proper 17-year delay
+- **Standard retirement test**: Confirmed retire-at-65, SS-at-67 with 2-year delay
+- **All tests passing**: 63/63 simulation tests, 16/16 deterministic tests, no regressions
 - **UI Consistency**: Wizard and Monte Carlo interfaces now perfectly aligned for spending method selection
 - **Test Strategy**: Added both unit tests for logic validation and integration tests for full simulation behavior
 

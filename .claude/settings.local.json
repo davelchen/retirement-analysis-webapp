@@ -5,7 +5,12 @@
       "Bash(python3 -m pytest tests/test_tax.py -v)",
       "Bash(python3 -m pytest tests/ -v --tb=short)",
       "Bash(python3:*)",
-      "Bash(ssh-keygen:*)"
+      "Bash(ssh-keygen:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Read(//Users/chenda/Downloads/**)",
+      "Bash(python -m pytest tests/test_simulation.py::test_social_security_income_tracking -v)"
     ],
     "deny": [],
     "ask": []

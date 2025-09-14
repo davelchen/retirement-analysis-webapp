@@ -342,6 +342,7 @@ def convert_wizard_json_to_simulation_params(wizard_json: Dict[str, Any]) -> Dic
     # Core parameters
     params = {
         'start_capital': basic.get('start_capital', 2_500_000),
+        'retirement_age': basic.get('retirement_age', 65),
         'horizon_years': basic.get('horizon_years', 50),
         'start_year': basic.get('start_year', 2025),
 
@@ -441,7 +442,7 @@ def convert_wizard_json_to_simulation_params(wizard_json: Dict[str, Any]) -> Dic
     params['college_end_year'] = advanced.get('college_start_year', 2032) + advanced.get('college_years', 4) - 1
     params['college_growth_real'] = advanced.get('college_inflation', 0.013)
 
-    params['re_flow_enabled'] = advanced.get('re_flow_enabled', True)
+    params['re_flow_enabled'] = advanced.get('re_flow_enabled', False)
     params['re_flow_preset'] = advanced.get('re_flow_preset', 'ramp')
     params['re_flow_start_year'] = advanced.get('re_income_start_year', 2026)
     params['re_flow_year1_amount'] = 50_000
@@ -552,7 +553,7 @@ def export_year_by_year_csv(details: Dict[str, List],
     # Rename columns to include currency format
     currency_columns = [
         'start_assets', 'base_spending', 'adjusted_base_spending',
-        'college_topup', 'one_times', 're_income', 'other_income',
+        'college_topup', 'one_times', 're_income', 'other_income', 'ss_income',
         'taxable_income', 'taxes', 'net_need', 'gross_withdrawal',
         'growth', 'inheritance', 'end_assets'
     ]

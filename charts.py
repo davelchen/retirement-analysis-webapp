@@ -719,9 +719,14 @@ def create_cash_flow_waterfall(year_by_year_details: Dict,
     
     re_income = year_by_year_details.get('re_income', [0] * len(years))[year_idx]
     if re_income > 0:
-        components.append('Real Estate Income')  
+        components.append('Real Estate Income')
         values.append(re_income)
-    
+
+    ss_income = year_by_year_details.get('ss_income', [0] * len(years))[year_idx]
+    if ss_income > 0:
+        components.append('Social Security Income')
+        values.append(ss_income)
+
     inheritance = year_by_year_details.get('inheritance', [0] * len(years))[year_idx]
     if inheritance > 0:
         components.append('Inheritance')

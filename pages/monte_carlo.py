@@ -263,6 +263,7 @@ def initialize_session_state():
     defaults = {
         # Core setup
         'start_year': 2026,
+        'retirement_age': 65,  # Standard retirement age
         'horizon_years': 40,  # Retire at 65, plan to 95
         'num_sims': 10_000,
         'random_seed': None,
@@ -316,7 +317,7 @@ def initialize_session_state():
         ],
         
         # Real estate cash flow (no rental income initially)
-        're_flow_enabled': True,
+        're_flow_enabled': False,
         're_flow_preset': 'delayed',
         're_flow_start_year': 2026,
         're_flow_year1_amount': 50_000,
@@ -418,6 +419,7 @@ def get_current_params() -> SimulationParams:
 
     return SimulationParams(
         start_year=st.session_state.start_year,
+        retirement_age=st.session_state.get('retirement_age', 65),
         horizon_years=st.session_state.horizon_years,
         num_sims=st.session_state.num_sims,
         random_seed=st.session_state.random_seed,
@@ -528,7 +530,16 @@ def create_sidebar():
         help="🎯 **Reproducibility control**\n\nEnter any number to get identical results across runs. Leave blank for different random outcomes each time."
     )
     st.session_state.random_seed = int(seed_input) if seed_input else None
-    
+
+    # Retirement age (editable)
+    st.session_state.retirement_age = st.sidebar.number_input(
+        "Retirement Age",
+        value=st.session_state.get('retirement_age', 65),
+        min_value=30,
+        max_value=75,
+        help="🎂 **Age when you retire and start withdrawing from portfolio**\n\nThis affects Social Security timing calculations:\n• Early retirement (30-50): Need larger portfolios\n• Traditional retirement (60-67): Standard planning\n• Later retirement (67+): More accumulation time"
+    )
+
     # Start Capital
     st.sidebar.header("Start Capital")
     capital_options = ['2,500,000', '3,000,000', '4,000,000', 'Custom']
@@ -691,16 +702,37 @@ def create_sidebar():
     # Only show guardrails and spending bounds for CAPE-based spending
     if spending_method == 'cape':
         with st.sidebar.expander("Guardrails (Guyton-Klinger)", expanded=False):
-            st.session_state.lower_wr = st.number_input(
-                "Lower Guardrail", value=st.session_state.lower_wr, format="%.3f",
-                help="📉 **Minimum withdrawal rate trigger**\n\nWhen withdrawal rate falls below this, increase spending by adjustment %. Typically 2.8-3.5%.",
-                key="mc_lower_wr"
+            # Lower guardrail with text input for better decimal handling
+            lower_wr_str = st.text_input(
+                "Lower Guardrail",
+                value=f"{st.session_state.lower_wr:.3f}",
+                help="📉 **Minimum withdrawal rate trigger**\n\nWhen withdrawal rate falls below this, increase spending by adjustment %. Typically 2.8-3.5%. Enter as decimal (e.g., 0.028).",
+                key="mc_lower_wr_str"
             )
-            st.session_state.upper_wr = st.number_input(
-                "Upper Guardrail", value=st.session_state.upper_wr, format="%.3f",
-                help="📈 **Maximum withdrawal rate trigger**\n\nWhen withdrawal rate exceeds this, decrease spending by adjustment %. Typically 4.5-6.0%.",
-                key="mc_upper_wr"
+            try:
+                st.session_state.lower_wr = float(lower_wr_str)
+                if st.session_state.lower_wr < 0 or st.session_state.lower_wr > 0.1:
+                    st.error("Lower guardrail must be between 0.000 and 0.100")
+                    st.session_state.lower_wr = 0.028
+            except ValueError:
+                st.error("Please enter a valid decimal number (e.g., 0.028)")
+                st.session_state.lower_wr = 0.028
+
+            # Upper guardrail with text input for better decimal handling
+            upper_wr_str = st.text_input(
+                "Upper Guardrail",
+                value=f"{st.session_state.upper_wr:.3f}",
+                help="📈 **Maximum withdrawal rate trigger**\n\nWhen withdrawal rate exceeds this, decrease spending by adjustment %. Typically 4.5-6.0%. Enter as decimal (e.g., 0.045).",
+                key="mc_upper_wr_str"
             )
+            try:
+                st.session_state.upper_wr = float(upper_wr_str)
+                if st.session_state.upper_wr < 0 or st.session_state.upper_wr > 0.1:
+                    st.error("Upper guardrail must be between 0.000 and 0.100")
+                    st.session_state.upper_wr = 0.045
+            except ValueError:
+                st.error("Please enter a valid decimal number (e.g., 0.045)")
+                st.session_state.upper_wr = 0.045
             st.session_state.adjustment_pct = st.number_input(
                 "Adjustment %", value=st.session_state.adjustment_pct, format="%.2f",
                 help="⚖️ **Spending adjustment magnitude**\n\nPercentage to increase/decrease spending when guardrails trigger. Typically 10-15%.",
@@ -755,7 +787,7 @@ def create_sidebar():
                 st.session_state.college_start_year = st.number_input(
                     "Start Year",
                     value=st.session_state.college_start_year,
-                    min_value=st.session_state.start_year,
+                    min_value=min(st.session_state.start_year, st.session_state.college_start_year),
                     max_value=st.session_state.start_year + st.session_state.horizon_years,
                     help="📅 **When college expenses begin**\n\nFirst year college costs are incurred. Typically when your first child starts college.",
                     key="mc_college_start_year"
@@ -803,7 +835,7 @@ def create_sidebar():
             col1, col2 = st.columns(2)
             with col1:
                 new_amount = st.number_input(f"Annual Amount {i+1}", value=expense.get('amount', 50000), min_value=0, key=f"expense_amount_{i}")
-                new_start = st.number_input(f"Start Year {i+1}", value=expense.get('start_year', expense.get('year', st.session_state.start_year + 5)), min_value=st.session_state.start_year, key=f"expense_start_{i}")
+                new_start = st.number_input(f"Start Year {i+1}", value=expense.get('start_year', expense.get('year', st.session_state.start_year + 5)), min_value=min(st.session_state.start_year, expense.get('start_year', st.session_state.start_year)), key=f"expense_start_{i}")
             with col2:
                 new_years = st.number_input(f"Duration {i+1}", value=expense.get('years', 1), min_value=1, key=f"expense_years_{i}")
                 if st.button("🗑️ Delete", key=f"delete_expense_{i}", help="Delete this expense stream"):
@@ -856,7 +888,7 @@ def create_sidebar():
                 st.session_state.re_flow_start_year = st.number_input(
                     "Start Year",
                     value=st.session_state.re_flow_start_year,
-                    min_value=st.session_state.start_year,
+                    min_value=min(st.session_state.start_year, st.session_state.re_flow_start_year),
                     max_value=st.session_state.start_year + st.session_state.horizon_years,
                     help="📅 **When real estate income begins**\n\nFirst year you expect to receive real estate cash flow.",
                     key="mc_re_flow_start_year"
@@ -937,7 +969,7 @@ def create_sidebar():
             col1, col2 = st.columns(2)
             with col1:
                 new_amount = st.number_input(f"Annual Amount {i+1}", value=stream['amount'], min_value=0, key=f"income_amount_{i}")
-                new_start = st.number_input(f"Start Year {i+1}", value=stream['start_year'], min_value=st.session_state.start_year, key=f"income_start_{i}")
+                new_start = st.number_input(f"Start Year {i+1}", value=stream['start_year'], min_value=min(st.session_state.start_year, stream['start_year']), key=f"income_start_{i}")
             with col2:
                 new_years = st.number_input(f"Duration {i+1}", value=stream['years'], min_value=1, key=f"income_years_{i}")
                 if st.button("🗑️ Delete", key=f"delete_income_{i}", help="Delete this income stream"):
@@ -1069,7 +1101,7 @@ def create_sidebar():
             value=st.session_state.get('ss_start_age', 67),
             min_value=62,
             max_value=70,
-            help="🎂 **Age to start Social Security**\n\n62: Early (reduced benefits)\n67: Full retirement age\n70: Delayed (increased benefits)"
+            help="🎂 **Age to start collecting Social Security** (can be different from retirement age)\n\n• **Age 62**: Early claiming, ~25% benefit reduction\n• **Age 67**: Full retirement age, 100% of benefit\n• **Age 70**: Maximum benefits, ~32% increase\n\n💡 **Common strategies**:\n• Retire at 65, start SS at 67 (bridge gap with portfolio)\n• Retire at 67, start SS immediately (full benefits)\n• Retire at 62, delay SS to 70 (maximize lifetime benefits)"
         )
 
         scenario_options = ['conservative', 'moderate', 'optimistic', 'custom']
@@ -1133,7 +1165,7 @@ def create_sidebar():
                 value=st.session_state.get('spouse_ss_start_age', 67),
                 min_value=62,
                 max_value=70,
-                help="🎂 **Age when spouse starts Social Security**\n\n62: Early (reduced)\n67: Full retirement age\n70: Delayed (increased)"
+                help="🎂 **Age when spouse starts collecting Social Security**\n\n• **Age 62**: Early claiming with benefit reduction\n• **Age 67**: Full retirement age benefits\n• **Age 70**: Maximum delayed retirement credits\n\n💡 **Coordination tip**: Spouses can claim at different ages to optimize household Social Security income."
             )
 
     # Market Regime
@@ -1332,7 +1364,18 @@ def display_summary_kpis():
     
     with col4:
         st.metric("Median Guardrail Hits", f"{np.median(results.guardrail_hits):.0f}")
-        st.metric("Prob < $15M", f"{terminal_stats['prob_below_15m']:.1%}")
+
+        # Calculate total SS income over simulation period
+        ss_income_list = results.median_path_details.get('ss_income', [])
+        if ss_income_list and any(income > 0 for income in ss_income_list):
+            total_ss_income = sum(ss_income_list)
+            if st.session_state.currency_view == "Nominal":
+                # Apply nominal conversion (approximate, using average inflation over period)
+                avg_inflation = (1 + st.session_state.inflation_rate) ** (st.session_state.horizon_years / 2)
+                total_ss_income *= avg_inflation
+            st.metric("Total SS Income", f"${total_ss_income/1_000_000:.1f}M {currency_suffix}")
+        else:
+            st.metric("Prob < $15M", f"{terminal_stats['prob_below_15m']:.1%}")
 
 
 def display_ai_analysis_section():

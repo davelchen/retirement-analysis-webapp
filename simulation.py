@@ -11,6 +11,7 @@ from dataclasses import dataclass
 class SimulationParams:
     """Parameters for Monte Carlo simulation"""
     start_year: int = 2026
+    retirement_age: int = 65
     horizon_years: int = 50
     num_sims: int = 10_000
     random_seed: Optional[int] = None
@@ -257,6 +258,7 @@ class RetirementSimulator:
             total_ss_income += calculate_social_security_benefit(
                 year=year,
                 start_year=self.params.start_year,
+                retirement_age=self.params.retirement_age,
                 annual_benefit=self.params.ss_annual_benefit,
                 scenario=self.params.ss_benefit_scenario,
                 custom_reduction=self.params.ss_custom_reduction,
@@ -270,6 +272,7 @@ class RetirementSimulator:
             total_ss_income += calculate_social_security_benefit(
                 year=year,
                 start_year=self.params.start_year,
+                retirement_age=self.params.retirement_age,
                 annual_benefit=self.params.spouse_ss_annual_benefit,
                 scenario=self.params.ss_benefit_scenario,  # Use same scenario
                 custom_reduction=self.params.ss_custom_reduction,  # Use same reduction
@@ -447,6 +450,7 @@ class RetirementSimulator:
                 'one_times': [],
                 're_income': [],
                 'other_income': [],
+                'ss_income': [],
                 'taxable_income': [],
                 'taxes': [],
                 'net_need': [],
@@ -574,6 +578,7 @@ class RetirementSimulator:
                 current_details['one_times'].append(one_times)
                 current_details['re_income'].append(re_income)
                 current_details['other_income'].append(other_income)
+                current_details['ss_income'].append(ss_income)
                 current_details['equity_allocation'].append(w_eq)
                 current_details['bonds_allocation'].append(w_bonds)
                 current_details['real_estate_allocation'].append(w_re)

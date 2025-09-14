@@ -115,6 +115,7 @@ class DeterministicProjector:
             total_ss_income += calculate_social_security_benefit(
                 year=year,
                 start_year=self.params.start_year,
+                retirement_age=self.params.retirement_age,
                 annual_benefit=self.params.ss_annual_benefit,
                 scenario=self.params.ss_benefit_scenario,
                 custom_reduction=self.params.ss_custom_reduction,
@@ -128,6 +129,7 @@ class DeterministicProjector:
             total_ss_income += calculate_social_security_benefit(
                 year=year,
                 start_year=self.params.start_year,
+                retirement_age=self.params.retirement_age,
                 annual_benefit=self.params.spouse_ss_annual_benefit,
                 scenario=self.params.ss_benefit_scenario,  # Use same scenario
                 custom_reduction=self.params.ss_custom_reduction,  # Use same reduction

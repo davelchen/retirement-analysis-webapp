@@ -605,7 +605,14 @@ def create_sidebar():
     st.session_state.cape_now = st.sidebar.number_input(
         "CAPE Ratio", 
         value=st.session_state.cape_now,
-        help="📊 **Current market valuation metric**\n\nCyclically Adjusted PE Ratio. Used to set initial withdrawal rate:\nBase Rate = 1.75% + 0.5 × (1/CAPE)\n\n• Low CAPE (~15): Higher safe withdrawal\n• High CAPE (~35+): Lower safe withdrawal"
+        help="📊 **CAPE = Cyclically Adjusted P/E Ratio** (Market Valuation)\n\n"
+             "What it is: Stock market 'expensiveness' smoothed over 10 years\n"
+             "• Low CAPE (15-20): Stocks cheap → Higher safe withdrawal rates\n"
+             "• High CAPE (30-40): Stocks expensive → Lower safe withdrawal rates\n\n"
+             "How we use it: Sets your initial withdrawal rate\n"
+             "Formula: Base 1.75% + 0.5 × (1/CAPE)\n\n"
+             "Current market: ~28-35 (check Robert Shiller's data)\n"
+             "Historical range: 5 (1920s) to 45+ (dot-com bubble)"
     )
     
     with st.sidebar.expander("Guardrails (Guyton-Klinger)", expanded=False):

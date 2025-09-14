@@ -1756,7 +1756,14 @@ def step_advanced():
             max_value=45.0,
             value=st.session_state.wizard_params.get('cape_now', 28.0),
             step=1.0,
-            help="📊 **Market valuation metric** - Cyclically Adjusted PE Ratio\n\nUsed to set initial withdrawal rate: Base Rate = 1.75% + 0.5 × (1/CAPE)\n\n• Low CAPE (~15): Higher safe withdrawal\n• High CAPE (~35+): Lower safe withdrawal\n• Historical average: ~20-25\n• Current market: Check Robert Shiller's data"
+            help="📊 **CAPE = Cyclically Adjusted P/E Ratio** (Market Valuation)\n\n"
+                 "What it is: Stock market 'expensiveness' smoothed over 10 years\n"
+                 "• Low CAPE (15-20): Stocks cheap → Higher safe withdrawal rates\n"
+                 "• High CAPE (30-40): Stocks expensive → Lower safe withdrawal rates\n\n"
+                 "How we use it: Sets your initial withdrawal rate\n"
+                 "Formula: Base 1.75% + 0.5 × (1/CAPE)\n\n"
+                 "Current market: ~28-35 (check Robert Shiller's data)\n"
+                 "Historical range: 5 (1920s) to 45+ (dot-com bubble)"
         )
         st.session_state.wizard_params['cape_now'] = cape_now
 

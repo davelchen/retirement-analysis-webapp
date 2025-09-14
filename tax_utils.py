@@ -52,10 +52,10 @@ def get_state_tax_rates(state, filing_status):
     return state_rates.get(state, state_rates['Federal Only'])[filing_status]
 
 
-def calculate_social_security_benefit(year, start_year, annual_benefit, scenario, custom_reduction, reduction_start_year, start_age):
+def calculate_social_security_benefit(year, start_year, retirement_age, annual_benefit, scenario, custom_reduction, reduction_start_year, start_age):
     """Calculate Social Security benefit for a given year with projected funding scenarios"""
-    # Assume they start retirement at 65, so age = 65 + (year - start_year)
-    age_at_year = 65 + (year - start_year)
+    # Calculate age based on actual retirement age, not hardcoded 65
+    age_at_year = retirement_age + (year - start_year)
 
     # Not eligible yet
     if age_at_year < start_age:
