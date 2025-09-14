@@ -222,6 +222,32 @@ Extend `io_utils.py` for Excel, PDF, or other output formats.
 
 This project demonstrates comprehensive financial modeling with professional software engineering practices including modular design, extensive testing, and user-friendly interfaces.
 
+## Technical Lessons Learned
+
+### Streamlit Execution Model & State Management
+- **Rerun Timing Issues**: `st.rerun()` after operations can cause duplicate UI rendering where both "ready" and "processing" states show simultaneously
+- **Solution**: Use conditional rendering based on button state instead of forced reruns: `if not (analyze_button or st.session_state.get('force_analysis', False))`
+- **Session State Variables**: UI widgets must use exact session state variable names - `st.session_state.other_income_streams` vs `st.session_state.income_streams` mismatch causes parameter loading failures
+- **Multipage Architecture**: Direct session state sharing between pages is more reliable than JSON file handoffs for parameter transfer
+
+### Pandas DataFrame Array Length Issues
+- **Root Cause**: Monte Carlo `wealth_paths` includes t=0 (initial wealth) plus all horizon years, creating N+1 data points
+- **Symptom**: `ValueError: All arrays must be of the same length` when years array (N elements) doesn't match data arrays (N+1 elements)
+- **Solution**: Use dynamic sizing with `results.wealth_paths.shape[1]` instead of calculated `horizon_years`
+- **Prevention**: Always validate array lengths before DataFrame construction
+- **Debug Pattern**: Use `print(f"DEBUG: array_name shape: {array.shape}")` to diagnose length mismatches
+
+### Security Best Practices
+- **API Key Protection**: Always verify `.gitignore` contains sensitive config files (`ui_config.json`, `default.json`, `*_personal_*.json`)
+- **Git Status Check**: Use `git status --ignored filename` to confirm files are properly ignored
+- **Search Patterns**: Use `grep -r "actual_secret_value"` to verify no hardcoded secrets in tracked files
+- **Never commit sensitive data**: Even in test files or examples
+
+### Testing & Documentation Maintenance
+- **Test Count Tracking**: With 230+ tests, documentation gets outdated quickly - regularly update README badges and counts
+- **Regression Tests**: For critical bugs like CSV exports, add both failure reproduction tests and fix validation tests
+- **Module Growth**: As test suites grow, update specific module test counts in documentation
+
 ## Recent Major Updates
 
 ### CSV Export Array Length Mismatch Fix (Latest - September 2025)
