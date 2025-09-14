@@ -86,7 +86,7 @@ Vectorized operations for performance:
 
 ### Spending Methods
 Three distinct spending approaches with appropriate guardrail integration:
-- **CAPE-based**: Uses market valuation to set initial withdrawal rate (3.5% + 0.5/CAPE) with Guyton-Klinger guardrails
+- **CAPE-based**: Uses market valuation to set initial withdrawal rate (3.2% + 0.5/CAPE) with Guyton-Klinger guardrails
 - **Fixed annual**: Constant spending amount every year, no guardrail adjustments
 - **Manual initial**: User-defined starting withdrawal rate with Guyton-Klinger guardrails (legacy option)
 
@@ -571,7 +571,7 @@ Complete transformation to unified Streamlit multipage application:
 - **Backward compatibility**: Works with or without personal configuration files
 
 ### CAPE Ratio Implementation Notes
-- **Current usage**: CAPE sets initial withdrawal rate via `0.035 + 0.5 * (1.0 / cape_now)` - higher base rate for realistic retirement spending
+- **Current usage**: CAPE sets initial withdrawal rate via `0.032 + 0.5 * (1.0 / cape_now)` - conservative base rate for safe retirement spending
 - **Static during simulation**: CAPE value doesn't evolve during the 50-year projection
 - **Not regime-dependent**: Market regimes affect returns but not CAPE trajectory
 - **Enhancement opportunity**: Could implement dynamic CAPE evolution based on market performance
