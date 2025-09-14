@@ -4,7 +4,7 @@ A comprehensive **Streamlit multipage application** for retirement planning feat
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-Educational-green.svg)
-![Tests](https://img.shields.io/badge/tests-83%20passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-231%20passed-brightgreen.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.49+-red.svg)
 
 ## 🚀 Quick Start
@@ -102,7 +102,7 @@ streamlit run main.py
 ├── charts.py                   # 📈 Plotly visualization builders
 ├── io_utils.py                 # 💾 Data import/export & JSON conversion
 ├── ai_analysis.py              # 🤖 Google Gemini AI integration & usage tracking
-├── tests/                      # 🧪 Comprehensive test suite (83+ tests)
+├── tests/                      # 🧪 Comprehensive test suite (230+ tests)
 │   ├── test_simulation.py      #     Core simulation tests
 │   ├── test_tax.py             #     Tax calculation tests
 │   ├── test_io.py              #     I/O and serialization tests
@@ -193,7 +193,7 @@ The application includes a **realistic California family scenario** with:
 
 ## 🧪 Testing & Validation
 
-**89 comprehensive unit tests** covering all major functionality:
+**230+ comprehensive unit tests** covering all major functionality:
 
 ```bash
 # Run complete test suite
@@ -207,11 +207,14 @@ pytest tests/test_simulation.py -v
 ```
 
 **Test Coverage Areas:**
-- ✅ **Monte Carlo Engine** (26 tests): Simulation logic, guardrails, regimes
-- ✅ **Tax Calculations** (24 tests): Progressive brackets, gross-up solver
-- ✅ **Data Management** (14 tests): Parameter serialization, CSV exports
-- ✅ **Deterministic Models** (14 tests): Expected return projections  
-- ✅ **UI Integration** (11 tests): Parameter conversion, validation
+- ✅ **Monte Carlo Engine** (50+ tests): Simulation logic, guardrails, regimes, percentile paths
+- ✅ **Tax Calculations** (30+ tests): Progressive brackets, gross-up solver, state taxes
+- ✅ **Data Management** (25+ tests): Parameter serialization, CSV exports, array length validation
+- ✅ **Deterministic Models** (16+ tests): Expected return projections, Social Security integration
+- ✅ **UI Integration** (40+ tests): Parameter conversion, wizard transitions, type safety
+- ✅ **AI Analysis** (25+ tests): Gemini integration, error handling, usage tracking
+- ✅ **App Functions** (15+ tests): State tax rates, Social Security calculations
+- ✅ **Parameter Validation** (20+ tests): Input validation, edge cases, error handling
 
 ## 🚀 Deployment & Configuration
 
