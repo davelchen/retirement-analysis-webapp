@@ -1729,16 +1729,17 @@ def display_downloads():
     
     with col2:
         # Percentile bands CSV
-        years = np.arange(st.session_state.start_year + 1, st.session_state.start_year + st.session_state.horizon_years + 1)
+        # wealth_paths includes initial wealth (year 0) + horizon_years, so total length is horizon_years + 1
+        years = np.arange(st.session_state.start_year, st.session_state.start_year + results.wealth_paths.shape[1])
         percentiles = calculate_percentiles(results.wealth_paths)
-        
+
         currency_suffix = st.session_state.currency_view.lower()
         if st.session_state.currency_view == "Nominal":
             for key in percentiles:
                 percentiles[key] = convert_to_nominal(
                     percentiles[key], st.session_state.start_year, st.session_state.inflation_rate
                 )
-        
+
         csv_data = export_percentile_bands_csv(years, percentiles, currency_suffix)
         st.download_button(
             label=f"Download Percentile Bands CSV ({currency_suffix.title()})",

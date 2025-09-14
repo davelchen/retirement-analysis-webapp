@@ -330,12 +330,60 @@ class TestParameterValidation:
             'horizon_years': 0,  # Invalid
             'num_sims': 1000
         }
-        
+
         json_str = json.dumps(invalid_params)
         is_valid, error = validate_parameters_json(json_str)
-        
+
         assert is_valid == False
         assert "Horizon years must be positive" in error
+
+    def test_percentile_bands_csv_array_length_mismatch(self):
+        """Test that percentile bands CSV export fails gracefully with mismatched array lengths"""
+        # This test reproduces the bug we fixed where years array (40) didn't match percentiles (41)
+        # This happens because wealth_paths includes initial wealth + horizon years
+
+        # Scenario: 40 horizon years but 41 wealth data points (includes t=0)
+        years_40 = np.arange(2026, 2066)  # 40 years: 2026-2065
+        percentiles_41 = {
+            'p10': np.random.random(41) * 1_000_000,  # 41 data points (t=0 to t=40)
+            'p50': np.random.random(41) * 2_000_000,
+            'p90': np.random.random(41) * 3_000_000
+        }
+
+        # This should raise a ValueError due to length mismatch
+        with pytest.raises(ValueError, match="All arrays must be of the same length"):
+            export_percentile_bands_csv(years_40, percentiles_41, "real")
+
+    def test_percentile_bands_csv_correct_array_sizing(self):
+        """Test that percentile bands CSV export works with correctly sized arrays"""
+        # Corrected scenario: Match years array to actual data points
+        # This represents the fix where we use results.wealth_paths.shape[1] for sizing
+
+        # Simulate 40 horizon years with 41 wealth data points (includes t=0)
+        start_year = 2026
+        num_wealth_points = 41  # This is what wealth_paths.shape[1] would return
+
+        # Generate years array that matches the wealth data points
+        years = np.arange(start_year, start_year + num_wealth_points)  # 41 years: 2026-2066
+        percentiles = {
+            'p10': np.random.random(num_wealth_points) * 1_000_000,  # 41 data points
+            'p50': np.random.random(num_wealth_points) * 2_000_000,
+            'p90': np.random.random(num_wealth_points) * 3_000_000
+        }
+
+        # This should work without errors
+        csv_str = export_percentile_bands_csv(years, percentiles, "real")
+        df = pd.read_csv(StringIO(csv_str))
+
+        # Verify the DataFrame structure
+        expected_cols = ['year', 'p10_wealth_real', 'p50_wealth_real', 'p90_wealth_real']
+        assert list(df.columns) == expected_cols
+        assert len(df) == num_wealth_points
+        assert df['year'].tolist() == years.tolist()
+
+        # Verify all arrays have the same length
+        assert len(df['p10_wealth_real']) == len(df['p50_wealth_real']) == len(df['p90_wealth_real'])
+        assert len(df) == len(years)
 
 
 class TestCurrencyFormatting:
