@@ -24,7 +24,7 @@ This is a comprehensive Streamlit web application for retirement planning using 
 - `ai_analysis.py`: Google Gemini AI integration with usage tracking and privacy controls
 
 ### Testing Strategy
-Comprehensive test suite with 100+ unit tests covering:
+Comprehensive test suite with 230+ unit tests covering:
 - Monte Carlo simulation logic and edge cases
 - Tax calculations and gross-up solver accuracy
 - State tax integration and rate calculations
@@ -224,6 +224,28 @@ This project demonstrates comprehensive financial modeling with professional sof
 
 ## Recent Major Updates
 
+### CSV Export Array Length Mismatch Fix (Latest - September 2025)
+**Critical bug fix for CSV export functionality that was causing application crashes:**
+
+**Fixed CSV Export Pandas DataFrame Error:**
+- **Problem**: `ValueError: All arrays must be of the same length` when exporting percentile bands CSV
+- **Root Cause**: Years array (40 elements) didn't match percentiles arrays (41 elements) because `wealth_paths` includes initial wealth plus horizon years
+- **Solution**: Changed from hardcoded calculation to dynamic sizing using `results.wealth_paths.shape[1]` instead of assumptions about array lengths
+- **Code Fix**: `pages/monte_carlo.py:1783` - `years = np.arange(st.session_state.start_year, st.session_state.start_year + results.wealth_paths.shape[1])`
+
+**Added Comprehensive Unit Tests:**
+- **Test Coverage**: Added 2 new regression tests in `tests/test_io.py`
+- **Bug Reproduction**: `test_percentile_bands_csv_array_length_mismatch` reproduces the exact error scenario
+- **Fix Validation**: `test_percentile_bands_csv_correct_array_sizing` validates the corrected approach
+- **Result**: Total test count increased to 230+ tests, all passing
+
+**Technical Implementation:**
+- **Dynamic Array Sizing**: Uses actual data shape instead of calculated lengths for robust CSV generation
+- **Regression Prevention**: Tests ensure future changes won't break CSV export functionality
+- **Error Context**: The issue occurred because wealth simulation results include t=0 (initial wealth) plus all horizon years
+
+## Recent Major Updates
+
 ### AI Analysis & Chat Interface Improvements (Latest - September 2025)
 **Major improvements to AI analysis experience and parameter loading reliability:**
 
@@ -402,12 +424,13 @@ Complete transformation to unified Streamlit multipage application:
   - Custom: User-defined reduction percentage and start year
 
 **Test Suite Enhancements**:
-- New `tests/test_app_functions.py`: 13 tests for state tax rates and Social Security calculations
-- Enhanced `tests/test_simulation.py`: 7 new tests for parameter integration and simulation logic
-- Updated `tests/test_io.py`: 2 new tests for Social Security parameter serialization
-- Enhanced `tests/test_deterministic.py`: 2 new tests for deterministic projector integration
+- New `tests/test_app_functions.py`: 15 tests for state tax rates and Social Security calculations
+- Enhanced `tests/test_simulation.py`: 50+ tests for parameter integration and simulation logic
+- Updated `tests/test_io.py`: 25 tests for Social Security parameter serialization and CSV exports
+- Enhanced `tests/test_deterministic.py`: 16 tests for deterministic projector integration
+- Added comprehensive test modules for wizard integration, type safety, and parameter validation
 - Fixed regression: Updated depletion test to account for Social Security benefits improving sustainability
-- **All 83+ tests passing**: Comprehensive validation with no regressions
+- **All 230+ tests passing**: Comprehensive validation with no regressions
 
 ### AI Analysis & User Experience Enhancements (September 2025)
 Major improvements to AI integration, user experience, and data management:
