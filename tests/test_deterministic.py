@@ -312,3 +312,54 @@ class TestNominalConversion:
         assert 'start_assets' in nominal_details
         assert 'years' in nominal_details
         assert len(nominal_details['start_assets']) == 2
+
+    def test_social_security_integration(self):
+        """Test Social Security integration in deterministic projector"""
+        params = SimulationParams(
+            horizon_years=10,
+            start_capital=1_000_000,
+            start_year=2026,
+            social_security_enabled=True,
+            ss_annual_benefit=40_000,
+            ss_start_age=67,
+            ss_benefit_scenario="moderate",
+            ss_reduction_start_year=2034
+        )
+        projector = DeterministicProjector(params)
+
+        # Test Social Security income method directly
+        # Before eligible age (age 66 in 2027, start_age is 67)
+        ss_income = projector._get_social_security_income(2027)
+        assert ss_income == 0
+
+        # At eligible age (age 68 in 2029, start_age is 67)
+        ss_income = projector._get_social_security_income(2029)
+        assert ss_income == 40_000
+
+        # Later (age 70 in 2031)
+        ss_income = projector._get_social_security_income(2031)
+        assert ss_income == 40_000
+
+        # Before reduction year (2033)
+        ss_income = projector._get_social_security_income(2033)
+        assert ss_income == 40_000
+
+        # After reduction starts (2035) - moderate scenario
+        ss_income = projector._get_social_security_income(2035)
+        expected = 40_000 * (1 - 0.06)  # 5% base + 1% for 1 year = 6%
+        assert abs(ss_income - expected) < 1
+
+    def test_social_security_disabled_deterministic(self):
+        """Test Social Security disabled in deterministic projector"""
+        params = SimulationParams(
+            horizon_years=5,
+            start_capital=1_000_000,
+            start_year=2026,
+            social_security_enabled=False,
+            ss_annual_benefit=40_000
+        )
+        projector = DeterministicProjector(params)
+
+        # Should return 0 even when age-eligible
+        ss_income = projector._get_social_security_income(2035)
+        assert ss_income == 0

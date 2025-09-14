@@ -22,20 +22,53 @@ This is a comprehensive Streamlit web application for retirement planning using 
 Comprehensive test suite with 100+ unit tests covering:
 - Monte Carlo simulation logic and edge cases
 - Tax calculations and gross-up solver accuracy
+- State tax integration and rate calculations
+- Social Security benefit modeling with funding scenarios
 - Parameter serialization/deserialization
 - UI integration and data structures
 - Deterministic projection validation
 - Chart generation and visualization functions
 - Market regime scenarios and custom configurations
 - College and real estate flow toggle functionality
+- Spousal Social Security integration
 
 ## Implementation Notes
 
 ### Tax Calculation System
-Uses simplified 3-bracket progressive model with automatic gross-up solver:
+Uses simplified 3-bracket progressive model with automatic gross-up solver and state tax integration:
 ```python
 def solve_gross_withdrawal(net_need, other_taxable_income, standard_deduction, tax_brackets):
     # Bisection method to find pre-tax withdrawal amount
+```
+
+**State Tax Integration**:
+- **10 states supported**: CA, NY, TX, FL, WA, NV, PA, OH, IL + Federal Only
+- **Combined rates**: Rough estimates of federal + state effective tax rates
+- **Auto-updating brackets**: Tax brackets automatically adjust when state changes
+- **High-tax states**: CA/NY with rates up to 36% combined
+- **No-tax states**: TX/FL/WA/NV using federal-only rates (10-24%)
+- **Moderate states**: PA/OH/IL with intermediate combined rates
+
+### Social Security Modeling
+Comprehensive Social Security integration with projected trust fund scenarios based on 2024-2025 Trustees Reports:
+
+**Funding Scenarios**:
+- **Conservative (19% cut)**: Full benefit reduction starting 2034 per current law
+- **Moderate (gradual reform)**: Partial cuts with Congressional intervention
+- **Optimistic (full reform)**: Benefits maintained through tax increases
+- **Custom**: User-defined reduction percentage and timing
+
+**Key Features**:
+- **Age flexibility**: Start benefits ages 62-70 with proper actuarial adjustments
+- **Spousal benefits**: Separate tracking for spouse's Social Security income
+- **Trust fund modeling**: Projects 2034 depletion timeline with scenario-based cuts
+- **Tax integration**: SS income reduces portfolio withdrawal requirements
+- **Real-dollar calculations**: Benefits subject to same funding scenarios
+
+```python
+def calculate_social_security_benefit(year, start_year, annual_benefit, scenario,
+                                    custom_reduction, reduction_start_year, start_age):
+    # Age-based eligibility with funding scenario adjustments
 ```
 
 ### Monte Carlo Engine
@@ -60,6 +93,14 @@ Every parameter includes detailed explanations with usage guidance and examples.
 - **Income streams**: Multiple sources with start year, duration, and amounts
 - **Overlapping support**: Multiple expense periods with accurate yearly totals
 - **Aggregation logic**: UI data structures converted to simulation parameters
+
+### Tax and Social Security UI
+- **State tax dropdown**: 10 common states with automatic bracket updates
+- **Social Security configuration**: Primary and spousal benefit modeling
+- **Funding scenario selection**: 4 options based on Congressional Budget Office projections
+- **Age customization**: Flexible start ages (62-70) for both spouses
+- **Trust fund timeline**: Projects 2034 depletion with user-defined custom scenarios
+- **Interactive help**: Detailed tooltips explaining each funding scenario and tax implication
 
 ### Advanced Visualization Suite
 - **Terminal Wealth Distribution**: High-resolution histograms (100-200 bins) with kernel density estimation (KDE) overlay, comprehensive percentile analysis, and failure threshold visualization
@@ -90,6 +131,9 @@ Personal configuration files ignored in git:
 Hypothetical California family:
 - $250K annual income, $2.5M portfolio at retirement
 - 65/25/8/2 allocation (Equity/Bonds/RE/Cash)
+- **California state taxes**: Combined fed+state rates (13%/31%/36%)
+- **Social Security**: $40K primary + optional spousal benefits
+- **Moderate funding scenario**: Gradual SS cuts with partial reform
 - College expenses, home renovation, healthcare costs
 - Part-time consulting and board position income
 
@@ -204,3 +248,35 @@ This project demonstrates comprehensive financial modeling with professional sof
 - **Static during simulation**: CAPE value doesn't evolve during the 50-year projection
 - **Not regime-dependent**: Market regimes affect returns but not CAPE trajectory
 - **Enhancement opportunity**: Could implement dynamic CAPE evolution based on market performance
+
+## Recent Major Updates
+
+### State Tax Integration & Social Security Modeling (Latest)
+- **State Tax Dropdown**: 10 common states with automatic combined federal+state tax bracket updates
+- **Comprehensive Social Security**: Primary and spousal benefits with 4 funding scenarios
+- **2024-2025 Projections**: Based on latest Social Security Trustees Report projections
+- **Trust Fund Modeling**: 2034 depletion timeline with 19% benefit cuts (conservative scenario)
+- **Enhanced Test Coverage**: 24 new tests covering state taxes, Social Security calculations, integration testing
+- **Improved Portfolio Sustainability**: Social Security income reduces withdrawal pressure, improving success rates
+- **Age Flexibility**: Configurable start ages (62-70) for both primary and spousal benefits
+- **Custom Scenarios**: User-defined benefit reduction percentages and timing
+- **Tax Integration**: Social Security income properly reduces portfolio withdrawal needs in tax calculations
+
+**Implementation Details**:
+- Age calculation: Assumes retirement at 65, so `age = 65 + (year - start_year)`
+- Spousal benefits use same funding scenario as primary beneficiary
+- All parameters properly serialized/deserialized in JSON format
+- State tax rates are rough estimates combining federal and state effective rates
+- Social Security scenarios:
+  - Conservative: 19% cut starting 2034 (current law)
+  - Moderate: Gradual cuts (5% + 1% per year) capping at 10%
+  - Optimistic: Full benefits maintained through reforms
+  - Custom: User-defined reduction percentage and start year
+
+**Test Suite Enhancements**:
+- New `tests/test_app_functions.py`: 13 tests for state tax rates and Social Security calculations
+- Enhanced `tests/test_simulation.py`: 7 new tests for parameter integration and simulation logic
+- Updated `tests/test_io.py`: 2 new tests for Social Security parameter serialization
+- Enhanced `tests/test_deterministic.py`: 2 new tests for deterministic projector integration
+- Fixed regression: Updated depletion test to account for Social Security benefits improving sustainability
+- **All 83+ tests passing**: Comprehensive validation with no regressions

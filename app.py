@@ -1,6 +1,7 @@
 """
 Streamlit web application for Monte Carlo retirement simulation.
-Provides intuitive UI for configuring assumptions and viewing results.
+Features state tax integration, Social Security modeling, and comprehensive
+retirement planning with tax-aware withdrawals and Guyton-Klinger guardrails.
 """
 import streamlit as st
 import numpy as np
@@ -26,6 +27,85 @@ from io_utils import (
     export_terminal_wealth_csv, export_percentile_bands_csv, export_year_by_year_csv,
     validate_parameters_json, format_currency, create_summary_report
 )
+
+
+def get_state_tax_rates(state, filing_status):
+    """Get combined federal + state tax rates for common states"""
+    # These are rough estimates combining federal and state effective rates
+    state_rates = {
+        'Federal Only': {
+            'MFJ': [(0, 0.10), (94_300, 0.22), (201_000, 0.24)],
+            'Single': [(0, 0.10), (47_150, 0.22), (100_500, 0.24)]
+        },
+        'CA': {  # High state tax
+            'MFJ': [(0, 0.13), (94_300, 0.31), (201_000, 0.36)],
+            'Single': [(0, 0.13), (47_150, 0.31), (100_500, 0.36)]
+        },
+        'NY': {  # High state tax
+            'MFJ': [(0, 0.14), (94_300, 0.30), (201_000, 0.35)],
+            'Single': [(0, 0.14), (47_150, 0.30), (100_500, 0.35)]
+        },
+        'TX': {  # No state income tax
+            'MFJ': [(0, 0.10), (94_300, 0.22), (201_000, 0.24)],
+            'Single': [(0, 0.10), (47_150, 0.22), (100_500, 0.24)]
+        },
+        'FL': {  # No state income tax
+            'MFJ': [(0, 0.10), (94_300, 0.22), (201_000, 0.24)],
+            'Single': [(0, 0.10), (47_150, 0.22), (100_500, 0.24)]
+        },
+        'WA': {  # No state income tax
+            'MFJ': [(0, 0.10), (94_300, 0.22), (201_000, 0.24)],
+            'Single': [(0, 0.10), (47_150, 0.22), (100_500, 0.24)]
+        },
+        'NV': {  # No state income tax
+            'MFJ': [(0, 0.10), (94_300, 0.22), (201_000, 0.24)],
+            'Single': [(0, 0.10), (47_150, 0.22), (100_500, 0.24)]
+        },
+        'PA': {  # Flat state tax
+            'MFJ': [(0, 0.13), (94_300, 0.25), (201_000, 0.27)],
+            'Single': [(0, 0.13), (47_150, 0.25), (100_500, 0.27)]
+        },
+        'OH': {  # Moderate state tax
+            'MFJ': [(0, 0.11), (94_300, 0.24), (201_000, 0.27)],
+            'Single': [(0, 0.11), (47_150, 0.24), (100_500, 0.27)]
+        },
+        'IL': {  # Flat state tax
+            'MFJ': [(0, 0.15), (94_300, 0.27), (201_000, 0.29)],
+            'Single': [(0, 0.15), (47_150, 0.27), (100_500, 0.29)]
+        }
+    }
+    return state_rates.get(state, state_rates['Federal Only'])[filing_status]
+
+
+def calculate_social_security_benefit(year, start_year, annual_benefit, scenario, custom_reduction, reduction_start_year, start_age):
+    """Calculate Social Security benefit for a given year with projected funding scenarios"""
+    # Assume they start retirement at 65, so age = 65 + (year - start_year)
+    age_at_year = 65 + (year - start_year)
+
+    # Not eligible yet
+    if age_at_year < start_age:
+        return 0
+
+    base_benefit = annual_benefit
+
+    # Apply scenario-based reductions
+    if year >= reduction_start_year:
+        if scenario == 'conservative':
+            # Full 19% cut starting 2034, no reform
+            reduction = 0.19
+        elif scenario == 'moderate':
+            # Gradual reduction to 10% cut, partial reforms
+            years_since_cut = year - reduction_start_year
+            reduction = min(0.10, 0.05 + (years_since_cut * 0.01))  # Gradual to 10%
+        elif scenario == 'optimistic':
+            # Full benefits maintained through reforms
+            reduction = 0.0
+        else:  # custom
+            reduction = custom_reduction
+
+        base_benefit *= (1 - reduction)
+
+    return base_benefit
 
 
 def initialize_session_state():
@@ -227,12 +307,26 @@ def initialize_session_state():
         # Tax parameters (California MFJ)
         'filing_status': 'MFJ',
         'standard_deduction': 29_200,  # Federal standard deduction
+        'state_tax': 'CA',  # Default to California
         'bracket_1_threshold': 0,
-        'bracket_1_rate': 0.10,
+        'bracket_1_rate': 0.13,  # Combined Fed+CA effective rate
         'bracket_2_threshold': 94_300,
-        'bracket_2_rate': 0.22,
+        'bracket_2_rate': 0.31,  # Combined Fed+CA effective rate
         'bracket_3_threshold': 201_000,
-        'bracket_3_rate': 0.24,  # Simplified - CA has additional state taxes
+        'bracket_3_rate': 0.36,  # Combined Fed+CA effective rate
+
+        # Social Security parameters
+        'social_security_enabled': True,
+        'ss_benefit_scenario': 'moderate',  # conservative, moderate, optimistic, custom
+        'ss_annual_benefit': 40_000,  # Estimated annual benefit
+        'ss_start_age': 67,  # Full retirement age
+        'ss_custom_reduction': 0.10,  # For custom scenario
+        'ss_reduction_start_year': 2034,  # When benefit cuts begin
+
+        # Spousal Social Security
+        'spouse_ss_enabled': False,
+        'spouse_ss_annual_benefit': 30_000,
+        'spouse_ss_start_age': 67,
         
         # Regime (baseline for demo)
         'regime': 'baseline',
@@ -317,6 +411,15 @@ def get_current_params() -> SimulationParams:
         filing_status=st.session_state.filing_status,
         standard_deduction=st.session_state.standard_deduction,
         tax_brackets=tax_brackets,
+        social_security_enabled=st.session_state.get('social_security_enabled', True),
+        ss_annual_benefit=st.session_state.get('ss_annual_benefit', 40000),
+        ss_start_age=st.session_state.get('ss_start_age', 67),
+        ss_benefit_scenario=st.session_state.get('ss_benefit_scenario', 'moderate'),
+        ss_custom_reduction=st.session_state.get('ss_custom_reduction', 0.10),
+        ss_reduction_start_year=st.session_state.get('ss_reduction_start_year', 2034),
+        spouse_ss_enabled=st.session_state.get('spouse_ss_enabled', False),
+        spouse_ss_annual_benefit=st.session_state.get('spouse_ss_annual_benefit', 30000),
+        spouse_ss_start_age=st.session_state.get('spouse_ss_start_age', 67),
         regime=st.session_state.regime,
         custom_equity_shock_year=st.session_state.custom_equity_shock_year,
         custom_equity_shock_return=st.session_state.custom_equity_shock_return,
@@ -718,13 +821,44 @@ def create_sidebar():
     # Tax Parameters
     st.sidebar.header("Tax Model")
     st.session_state.filing_status = st.sidebar.selectbox(
-        "Filing Status", 
-        options=['MFJ', 'Single'], 
+        "Filing Status",
+        options=['MFJ', 'Single'],
         index=['MFJ', 'Single'].index(st.session_state.filing_status),
         help="👥 **Tax filing status**\n\nMFJ: Married Filing Jointly\nSingle: Single filer\n\nAffects standard deduction and tax brackets."
     )
+
+    # State tax selection
+    state_options = ['Federal Only', 'CA', 'NY', 'TX', 'FL', 'WA', 'NV', 'PA', 'OH', 'IL']
+    current_state = st.session_state.get('state_tax', 'CA')
+    if current_state not in state_options:
+        current_state = 'Federal Only'
+
+    selected_state = st.sidebar.selectbox(
+        "State Tax",
+        options=state_options,
+        index=state_options.index(current_state),
+        help="🏛️ **State for combined federal + state tax rates**\n\n"
+             "**Federal Only**: Federal taxes only\n"
+             "**CA/NY**: High state income tax\n"
+             "**TX/FL/WA/NV**: No state income tax\n"
+             "**PA/OH/IL**: Moderate state tax\n\n"
+             "Rates are rough estimates for retirement income."
+    )
+
+    # Update tax brackets if state changed
+    if selected_state != st.session_state.get('state_tax', 'CA'):
+        st.session_state.state_tax = selected_state
+        state_brackets = get_state_tax_rates(selected_state, st.session_state.filing_status)
+        st.session_state.bracket_1_threshold = state_brackets[0][0]
+        st.session_state.bracket_1_rate = state_brackets[0][1]
+        st.session_state.bracket_2_threshold = state_brackets[1][0]
+        st.session_state.bracket_2_rate = state_brackets[1][1]
+        st.session_state.bracket_3_threshold = state_brackets[2][0]
+        st.session_state.bracket_3_rate = state_brackets[2][1]
+        st.rerun()
+
     st.session_state.standard_deduction = st.sidebar.number_input(
-        "Standard Deduction ($)", 
+        "Standard Deduction ($)",
         value=st.session_state.standard_deduction,
         help="📋 **Standard tax deduction**\n\nAmount deducted from gross income before calculating taxes. 2024: MFJ ~$29K, Single ~$15K."
     )
@@ -754,7 +888,98 @@ def create_sidebar():
             "Bracket 3 Rate", value=st.session_state.bracket_3_rate, format="%.2f",
             help="📊 **Tax rate for third bracket**\n\nHighest rate modeled. Typically 24-32%."
         )
-    
+
+    # Social Security Parameters
+    st.sidebar.header("Social Security")
+
+    st.session_state.social_security_enabled = st.sidebar.checkbox(
+        "Include Social Security",
+        value=st.session_state.get('social_security_enabled', True),
+        help="✅ **Include Social Security benefits**\n\nAdd estimated Social Security income to retirement projections."
+    )
+
+    if st.session_state.social_security_enabled:
+        st.session_state.ss_annual_benefit = st.sidebar.number_input(
+            "Annual SS Benefit ($)",
+            value=st.session_state.get('ss_annual_benefit', 40000),
+            min_value=0,
+            max_value=200000,
+            step=1000,
+            help="💰 **Estimated annual Social Security benefit**\n\nFull benefit at your full retirement age. Check your SSA statement for estimates."
+        )
+
+        st.session_state.ss_start_age = st.sidebar.number_input(
+            "SS Start Age",
+            value=st.session_state.get('ss_start_age', 67),
+            min_value=62,
+            max_value=70,
+            help="🎂 **Age to start Social Security**\n\n62: Early (reduced benefits)\n67: Full retirement age\n70: Delayed (increased benefits)"
+        )
+
+        scenario_options = ['conservative', 'moderate', 'optimistic', 'custom']
+        scenario_labels = {
+            'conservative': 'Conservative (19% cut in 2034)',
+            'moderate': 'Moderate (gradual cuts, partial reform)',
+            'optimistic': 'Optimistic (full benefits maintained)',
+            'custom': 'Custom (set your own reduction)'
+        }
+
+        st.session_state.ss_benefit_scenario = st.sidebar.selectbox(
+            "Funding Scenario",
+            options=scenario_options,
+            index=scenario_options.index(st.session_state.get('ss_benefit_scenario', 'moderate')),
+            format_func=lambda x: scenario_labels[x],
+            help="📊 **Social Security trust fund scenarios**\n\n"
+                 "**Conservative**: Full 19% benefit cut starting 2034 (current law)\n"
+                 "**Moderate**: Gradual cuts with partial Congressional reforms\n"
+                 "**Optimistic**: Full benefits through tax increases/reforms\n"
+                 "**Custom**: Define your own reduction percentage and timing"
+        )
+
+        if st.session_state.ss_benefit_scenario == 'custom':
+            st.session_state.ss_custom_reduction = st.sidebar.slider(
+                "Custom Reduction %",
+                min_value=0.0,
+                max_value=0.5,
+                value=st.session_state.get('ss_custom_reduction', 0.10),
+                step=0.01,
+                format="%.1f%%",
+                help="🔧 **Custom benefit reduction**\n\nPercentage reduction in benefits starting from the reduction year."
+            ) / 100  # Convert percentage to decimal
+
+            st.session_state.ss_reduction_start_year = st.sidebar.number_input(
+                "Reduction Start Year",
+                value=st.session_state.get('ss_reduction_start_year', 2034),
+                min_value=2025,
+                max_value=2050,
+                help="📅 **Year when benefit reductions begin**\n\nTrustees project 2034 as current depletion date."
+            )
+
+        # Spousal Social Security
+        st.session_state.spouse_ss_enabled = st.sidebar.checkbox(
+            "Include Spouse SS",
+            value=st.session_state.get('spouse_ss_enabled', False),
+            help="💑 **Include spousal Social Security benefits**\n\nAdd spouse's estimated Social Security income to projections."
+        )
+
+        if st.session_state.spouse_ss_enabled:
+            st.session_state.spouse_ss_annual_benefit = st.sidebar.number_input(
+                "Spouse Annual SS ($)",
+                value=st.session_state.get('spouse_ss_annual_benefit', 30000),
+                min_value=0,
+                max_value=200000,
+                step=1000,
+                help="💰 **Spouse's annual Social Security benefit**\n\nFull benefit at spouse's full retirement age."
+            )
+
+            st.session_state.spouse_ss_start_age = st.sidebar.number_input(
+                "Spouse SS Start Age",
+                value=st.session_state.get('spouse_ss_start_age', 67),
+                min_value=62,
+                max_value=70,
+                help="🎂 **Age when spouse starts Social Security**\n\n62: Early (reduced)\n67: Full retirement age\n70: Delayed (increased)"
+            )
+
     # Market Regime
     st.sidebar.header("Market Regime")
     

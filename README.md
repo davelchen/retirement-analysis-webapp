@@ -4,7 +4,7 @@ A comprehensive **Streamlit web application** for retirement planning using Mont
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-Educational-green.svg)
-![Tests](https://img.shields.io/badge/tests-89%20passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-83%20passed-brightgreen.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.49+-red.svg)
 
 ## 🚀 Quick Start
@@ -32,10 +32,18 @@ streamlit run app.py
 - **Multiple asset classes** with customizable return assumptions
 
 ### 🎯 **Intelligent Tax Modeling**
-- **Progressive tax brackets** (federal, configurable)
+- **State tax integration** - 10 common states with combined federal+state rates
+- **Progressive tax brackets** with automatic updates when state changes
 - **Gross-up solver** automatically calculates pre-tax withdrawals
 - **Standard deduction** and filing status support
 - **Real-time tax impact** analysis in projections
+
+### 🏛️ **Social Security Integration**
+- **Comprehensive modeling** with primary and spousal benefits
+- **4 funding scenarios** based on 2024-2025 Trustees Report projections
+- **Trust fund timeline** modeling 2034 depletion with benefit cuts
+- **Age flexibility** - start benefits anywhere from 62-70
+- **Tax-aware integration** - SS income reduces portfolio withdrawals
 
 ### 📊 **Rich Interactive UI**
 - **Comprehensive tooltips** for every parameter with usage guidance
@@ -193,10 +201,14 @@ new_asset_vol = 0.12
 ```
 
 ### **🧮 Enhanced Tax Models**
-```python  
-# Extend tax.py for state taxes, capital gains
-def calculate_state_tax(income, state):
-    # Custom state tax logic
+```python
+# Extend tax.py for capital gains, Roth conversions
+def calculate_capital_gains_tax(gains, holding_period):
+    # Long-term vs short-term capital gains
+    pass
+
+def calculate_roth_conversion_tax(conversion_amount):
+    # Tax implications of Roth conversions
     pass
 ```
 
@@ -231,8 +243,9 @@ def export_excel_workbook(results):
 - **Git ignored** personal configuration files
 
 ### **🎯 Accuracy Considerations**
-- **Simplified tax model** (federal only, basic brackets)
-- **No state tax calculations** (user should adjust brackets)
+- **Simplified tax model** (combined federal+state rates, basic brackets)
+- **State tax estimates** are rough approximations for retirement income
+- **Social Security projections** based on current Trustees Reports (2024-2025)
 - **Real estate** treated as REITs, not direct ownership
 - **Inflation assumptions** may vary from actual experience
 
@@ -240,10 +253,11 @@ def export_excel_workbook(results):
 
 Contributions welcome! Areas for enhancement:
 
-- 🏛️ **State tax modules** for different jurisdictions
 - 📊 **Additional asset classes** (commodities, international bonds)
 - 🎨 **Enhanced visualizations** (risk/return charts, Monte Carlo paths)
 - 🧮 **Advanced tax modeling** (capital gains, Roth conversions)
+- 🔬 **Healthcare cost modeling** with inflation projections
+- 🌎 **International tax considerations** for expats
 - 📱 **Mobile responsive** design improvements
 
 ## 📄 License

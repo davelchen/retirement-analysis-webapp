@@ -114,6 +114,52 @@ class TestParameterSerialization:
         restored_params = parse_parameters_upload_json(json_str)
         assert restored_params.tax_brackets == [(0, 0.10), (47150, 0.22), (100500, 0.24)]
 
+    def test_social_security_json_handling(self):
+        """Test Social Security parameters are properly handled in JSON"""
+        params = SimulationParams(
+            social_security_enabled=True,
+            ss_annual_benefit=50_000,
+            ss_start_age=70,
+            ss_benefit_scenario="conservative",
+            ss_custom_reduction=0.15,
+            ss_reduction_start_year=2035
+        )
+
+        json_str = create_parameters_download_json(params)
+        parsed = json.loads(json_str)
+
+        # Verify all Social Security fields are serialized
+        assert parsed['social_security_enabled'] == True
+        assert parsed['ss_annual_benefit'] == 50_000
+        assert parsed['ss_start_age'] == 70
+        assert parsed['ss_benefit_scenario'] == "conservative"
+        assert parsed['ss_custom_reduction'] == 0.15
+        assert parsed['ss_reduction_start_year'] == 2035
+
+        # Should properly deserialize
+        restored_params = parse_parameters_upload_json(json_str)
+        assert restored_params.social_security_enabled == True
+        assert restored_params.ss_annual_benefit == 50_000
+        assert restored_params.ss_start_age == 70
+        assert restored_params.ss_benefit_scenario == "conservative"
+        assert restored_params.ss_custom_reduction == 0.15
+        assert restored_params.ss_reduction_start_year == 2035
+
+    def test_social_security_json_round_trip_with_defaults(self):
+        """Test Social Security JSON serialization with default values"""
+        params = SimulationParams()  # Use defaults
+
+        json_str = create_parameters_download_json(params)
+        restored_params = parse_parameters_upload_json(json_str)
+
+        # Verify defaults are preserved
+        assert restored_params.social_security_enabled == True
+        assert restored_params.ss_annual_benefit == 40_000
+        assert restored_params.ss_start_age == 67
+        assert restored_params.ss_benefit_scenario == "moderate"
+        assert restored_params.ss_custom_reduction == 0.10
+        assert restored_params.ss_reduction_start_year == 2034
+
 
 class TestCSVExports:
     """Test CSV export functionality"""

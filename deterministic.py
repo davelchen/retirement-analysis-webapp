@@ -99,11 +99,43 @@ class DeterministicProjector:
         """Get other income for given year (real dollars, net of tax)"""
         if self.params.other_income_years == 0:
             return 0
-        
+
         year_offset = year - self.params.other_income_start_year
         if 0 <= year_offset < self.params.other_income_years:
             return self.params.other_income_amount
         return 0
+
+    def _get_social_security_income(self, year: int) -> float:
+        """Get Social Security income for given year (real dollars, net of tax)"""
+        total_ss_income = 0
+
+        # Primary Social Security
+        if self.params.social_security_enabled:
+            from app import calculate_social_security_benefit
+            total_ss_income += calculate_social_security_benefit(
+                year=year,
+                start_year=self.params.start_year,
+                annual_benefit=self.params.ss_annual_benefit,
+                scenario=self.params.ss_benefit_scenario,
+                custom_reduction=self.params.ss_custom_reduction,
+                reduction_start_year=self.params.ss_reduction_start_year,
+                start_age=self.params.ss_start_age
+            )
+
+        # Spousal Social Security
+        if self.params.spouse_ss_enabled:
+            from app import calculate_social_security_benefit
+            total_ss_income += calculate_social_security_benefit(
+                year=year,
+                start_year=self.params.start_year,
+                annual_benefit=self.params.spouse_ss_annual_benefit,
+                scenario=self.params.ss_benefit_scenario,  # Use same scenario
+                custom_reduction=self.params.ss_custom_reduction,  # Use same reduction
+                reduction_start_year=self.params.ss_reduction_start_year,
+                start_age=self.params.spouse_ss_start_age
+            )
+
+        return total_ss_income
     
     def _apply_spending_guardrails(self, current_base_spend: float, 
                                  portfolio_value: float) -> tuple[float, str]:
@@ -213,7 +245,8 @@ class DeterministicProjector:
             # Subtract non-portfolio income
             re_income = self._get_re_income(current_year)
             other_income = self._get_other_income(current_year)
-            net_need = total_spending_need - re_income - other_income
+            ss_income = self._get_social_security_income(current_year)
+            net_need = total_spending_need - re_income - other_income - ss_income
             
             # Calculate gross withdrawal with taxes
             gross_withdrawal, taxes = solve_gross_withdrawal(

@@ -40,6 +40,46 @@ class TestSimulationParams:
         expected = [(0, 0.10), (47_150, 0.22), (100_500, 0.24)]
         assert params.tax_brackets == expected
 
+    def test_social_security_default_params(self):
+        """Test Social Security default parameters"""
+        params = SimulationParams()
+        assert params.social_security_enabled == True
+        assert params.ss_annual_benefit == 40_000
+        assert params.ss_start_age == 67
+        assert params.ss_benefit_scenario == "moderate"
+        assert params.ss_custom_reduction == 0.10
+        assert params.ss_reduction_start_year == 2034
+
+    def test_social_security_custom_params(self):
+        """Test Social Security custom parameters"""
+        params = SimulationParams(
+            social_security_enabled=False,
+            ss_annual_benefit=55_000,
+            ss_start_age=70,
+            ss_benefit_scenario="conservative",
+            ss_custom_reduction=0.15,
+            ss_reduction_start_year=2035
+        )
+        assert params.social_security_enabled == False
+        assert params.ss_annual_benefit == 55_000
+        assert params.ss_start_age == 70
+        assert params.ss_benefit_scenario == "conservative"
+        assert params.ss_custom_reduction == 0.15
+        assert params.ss_reduction_start_year == 2035
+
+    def test_social_security_scenarios_valid(self):
+        """Test valid Social Security scenarios"""
+        valid_scenarios = ['conservative', 'moderate', 'optimistic', 'custom']
+        for scenario in valid_scenarios:
+            params = SimulationParams(ss_benefit_scenario=scenario)
+            assert params.ss_benefit_scenario == scenario
+
+    def test_social_security_age_range_valid(self):
+        """Test valid Social Security start ages"""
+        for age in [62, 65, 67, 70]:
+            params = SimulationParams(ss_start_age=age)
+            assert params.ss_start_age == age
+
 
 class TestRetirementSimulator:
     """Test retirement simulation logic"""
@@ -260,16 +300,17 @@ class TestRetirementSimulator:
     def test_simulation_with_depletion(self):
         """Test simulation that leads to portfolio depletion"""
         params = SimulationParams(
-            start_capital=500_000,  # Small portfolio
+            start_capital=300_000,  # Very small portfolio
             num_sims=10,
-            horizon_years=10,
-            spending_floor_real=100_000,  # High floor
+            horizon_years=15,  # Longer horizon
+            spending_floor_real=120_000,  # Very high floor
+            social_security_enabled=False,  # Disable SS to force depletion
             random_seed=42
         )
         simulator = RetirementSimulator(params)
         results = simulator.run_simulation()
-        
-        # Should have some failures
+
+        # Should have some failures with these aggressive parameters
         assert results.success_rate < 1.0
         assert np.any(results.years_depleted > 0)
 
@@ -504,3 +545,79 @@ class TestUtilityFunctions:
         # Steady state
         assert simulator._get_re_income(2032) == 50_000
         assert simulator._get_re_income(2035) == 50_000
+
+    def test_social_security_income_integration(self):
+        """Test Social Security income integration with simulation"""
+        params = SimulationParams(
+            social_security_enabled=True,
+            ss_annual_benefit=45_000,
+            ss_start_age=67,
+            ss_benefit_scenario="moderate",
+            ss_reduction_start_year=2034,
+            start_year=2026
+        )
+        simulator = RetirementSimulator(params)
+
+        # Before eligible age (age 66 in 2027, start_age is 67)
+        ss_income = simulator._get_social_security_income(2027)
+        assert ss_income == 0
+
+        # At eligible age (age 68 in 2029, start_age is 67)
+        ss_income = simulator._get_social_security_income(2029)
+        assert ss_income == 45_000
+
+        # Later (age 70 in 2031)
+        ss_income = simulator._get_social_security_income(2031)
+        assert ss_income == 45_000
+
+        # Before reduction year (2033)
+        ss_income = simulator._get_social_security_income(2033)
+        assert ss_income == 45_000
+
+        # After reduction starts (2035) - moderate scenario
+        ss_income = simulator._get_social_security_income(2035)
+        expected = 45_000 * (1 - 0.06)  # 5% base + 1% for 1 year = 6%
+        assert abs(ss_income - expected) < 1
+
+    def test_social_security_income_disabled(self):
+        """Test Social Security income when disabled"""
+        params = SimulationParams(
+            social_security_enabled=False,
+            ss_annual_benefit=45_000,
+            start_year=2026
+        )
+        simulator = RetirementSimulator(params)
+
+        # Should return 0 even when age-eligible
+        ss_income = simulator._get_social_security_income(2035)
+        assert ss_income == 0
+
+    def test_social_security_income_scenarios(self):
+        """Test different Social Security funding scenarios"""
+        base_params = {
+            'social_security_enabled': True,
+            'ss_annual_benefit': 40_000,
+            'ss_start_age': 67,
+            'ss_reduction_start_year': 2034,
+            'start_year': 2026
+        }
+
+        # Conservative scenario
+        params = SimulationParams(**base_params, ss_benefit_scenario="conservative")
+        simulator = RetirementSimulator(params)
+        ss_income = simulator._get_social_security_income(2035)
+        expected = 40_000 * (1 - 0.19)  # 19% cut
+        assert abs(ss_income - expected) < 1
+
+        # Optimistic scenario
+        params = SimulationParams(**base_params, ss_benefit_scenario="optimistic")
+        simulator = RetirementSimulator(params)
+        ss_income = simulator._get_social_security_income(2035)
+        assert ss_income == 40_000  # No cuts
+
+        # Custom scenario
+        params = SimulationParams(**base_params, ss_benefit_scenario="custom", ss_custom_reduction=0.12)
+        simulator = RetirementSimulator(params)
+        ss_income = simulator._get_social_security_income(2035)
+        expected = 40_000 * (1 - 0.12)  # 12% custom cut
+        assert abs(ss_income - expected) < 1
