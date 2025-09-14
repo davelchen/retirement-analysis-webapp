@@ -203,8 +203,11 @@ def create_wealth_percentile_bands(years: np.ndarray,
         line=dict(color='lightblue'),
         name='P10-P90 Range',
         fillcolor='rgba(173,216,230,0.3)',
+        customdata=np.column_stack([p10_millions, p90_millions]),
         hovertemplate="<b>Year:</b> %{x}<br>" +
-                     "<b>P10-P90 Range:</b> $%{y:.1f}M<br>" +
+                     "<b>P10 (Pessimistic):</b> $%{customdata[0]:.1f}M<br>" +
+                     "<b>P90 (Optimistic):</b> $%{customdata[1]:.1f}M<br>" +
+                     "<b>Range:</b> $%{customdata[0]:.1f}M - $%{customdata[1]:.1f}M<br>" +
                      "<extra></extra>"
     ))
     
@@ -572,7 +575,12 @@ def create_monte_carlo_paths_sample(years: np.ndarray,
         line=dict(color='lightgray', width=1),
         fillcolor='rgba(128,128,128,0.2)',
         name='P10-P90 Range',
-        hovertemplate="<b>P10-P90 Range</b><br><extra></extra>"
+        customdata=np.column_stack([percentiles['p10'], percentiles['p90']]),
+        hovertemplate="<b>Year:</b> %{x}<br>" +
+                     "<b>P10 (Pessimistic):</b> $%{customdata[0]:.1f}M<br>" +
+                     "<b>P90 (Optimistic):</b> $%{customdata[1]:.1f}M<br>" +
+                     "<b>Range:</b> $%{customdata[0]:.1f}M - $%{customdata[1]:.1f}M<br>" +
+                     "<extra></extra>"
     ))
     
     # Add median line
@@ -907,9 +915,11 @@ def create_drawdown_analysis(wealth_paths: np.ndarray,
         line=dict(color='lightcoral'),
         fillcolor='rgba(255,182,193,0.3)',
         name='P10-P90 Drawdown Range',
-        hovertemplate="<b>Drawdown Range</b><br>" +
-                     "<b>Year:</b> %{x}<br>" +
-                     "<b>Drawdown:</b> %{y:.1f}%<br>" +
+        customdata=np.column_stack([p10_dd, p90_dd]),
+        hovertemplate="<b>Year:</b> %{x}<br>" +
+                     "<b>P10 Drawdown (Worst Case):</b> %{customdata[0]:.1f}%<br>" +
+                     "<b>P90 Drawdown (Best Case):</b> %{customdata[1]:.1f}%<br>" +
+                     "<b>Drawdown Range:</b> %{customdata[1]:.1f}% to %{customdata[0]:.1f}%<br>" +
                      "<extra></extra>"
     ))
     
