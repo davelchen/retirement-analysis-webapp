@@ -19,57 +19,18 @@ import math
 from io_utils import create_parameters_download_json, convert_wizard_to_json
 from simulation import SimulationParams
 from ai_analysis import RetirementAnalyzer
+import sys
 import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from wizard_charts import create_allocation_pie_chart, create_risk_return_scatter
+from wizard_utils import convert_json_to_wizard_params, convert_flat_to_wizard_params
+from config_utils import (
+    load_ui_config, save_ui_config, WIZARD_STEPS, get_default_wizard_params,
+    get_wizard_widget_mappings, get_widget_keys_for_immediate_sync
+)
 
-def load_ui_config():
-    """Load UI configuration like API keys from ui_config.json"""
-    print(f"DEBUG [load_ui_config]: CALLED - Starting UI config load from ui_config.json")
-    try:
-        if os.path.exists('ui_config.json'):
-            print(f"DEBUG [load_ui_config]: File exists, reading...")
-            with open('ui_config.json', 'r') as f:
-                config = json.load(f)
-            print(f"DEBUG [load_ui_config]: Successfully loaded config with {len(config)} keys")
-            print(f"DEBUG [load_ui_config]: enable_ai_analysis = {config.get('enable_ai_analysis', 'MISSING')}")
-            print(f"DEBUG [load_ui_config]: gemini_api_key = {config.get('gemini_api_key', 'MISSING')[:10] if config.get('gemini_api_key') else 'EMPTY'}...")
-            print(f"DEBUG [load_ui_config]: gemini_model = {config.get('gemini_model', 'MISSING')}")
-            return config
-        else:
-            print(f"DEBUG [load_ui_config]: ui_config.json does not exist")
-    except Exception as e:
-        print(f"ERROR [load_ui_config]: Could not load ui_config.json: {e}")
-    default_config = {}
-    print(f"DEBUG [load_ui_config]: Returning empty config")
-    return default_config
 
-def save_ui_config(config):
-    """Save UI configuration to ui_config.json"""
-    print(f"DEBUG [save_ui_config]: CALLED - Starting UI config save to ui_config.json")
-    print(f"DEBUG [save_ui_config]: Config to save has {len(config)} keys:")
-    print(f"DEBUG [save_ui_config]: enable_ai_analysis = {config.get('enable_ai_analysis', 'MISSING')}")
-    print(f"DEBUG [save_ui_config]: gemini_api_key = {config.get('gemini_api_key', 'MISSING')[:10] if config.get('gemini_api_key') else 'EMPTY'}...")
-    print(f"DEBUG [save_ui_config]: gemini_model = {config.get('gemini_model', 'MISSING')}")
-    try:
-        with open('ui_config.json', 'w') as f:
-            json.dump(config, f, indent=2)
-        print(f"DEBUG [save_ui_config]: Successfully saved to ui_config.json")
-    except Exception as e:
-        print(f"ERROR [save_ui_config]: Could not save ui_config.json: {e}")
 
-# Wizard configuration
-WIZARD_STEPS = [
-    {"id": "welcome", "title": "🏠 Welcome", "description": "Getting started with your retirement plan"},
-    {"id": "basics", "title": "💰 Financial Basics", "description": "Current situation and spending needs"},
-    {"id": "allocation", "title": "📊 Asset Allocation", "description": "Portfolio mix and risk tolerance"},
-    {"id": "market", "title": "📈 Market Expectations", "description": "Return assumptions and volatility"},
-    {"id": "taxes", "title": "🏛️ Tax Planning", "description": "State taxes and brackets"},
-    {"id": "social_security", "title": "🏛️ Social Security", "description": "Benefit planning and scenarios"},
-    {"id": "guardrails", "title": "⚖️ Spending Guardrails", "description": "Dynamic spending adjustments"},
-    {"id": "cash_flows", "title": "💸 Income & Expenses", "description": "Additional cash flows over time"},
-    {"id": "ai_setup", "title": "🤖 AI Analysis", "description": "Optional AI-powered insights"},
-    {"id": "advanced", "title": "⚙️ Advanced Options", "description": "Market scenarios and fine-tuning"},
-    {"id": "review", "title": "📋 Review & Generate", "description": "Final review and JSON export"}
-]
 
 def safe_get_wizard_param(key, default_value):
     """Safely get a wizard parameter with default fallback"""
@@ -96,73 +57,7 @@ def sync_widget_values_to_wizard_params():
             print(f"DEBUG [sync_widget_values]: MISSING {widget_key}")
 
     # Map widget keys to wizard_params keys
-    widget_mappings = {
-        # Financial Basics
-        'wiz_start_capital': 'start_capital',
-        'wiz_retirement_age': 'retirement_age',
-        'wiz_start_year': 'start_year',
-        'wiz_horizon_years': 'horizon_years',
-        'wiz_spending_method': 'spending_method',
-        'wiz_annual_spending': 'annual_spending',
-        'wiz_cape_now': 'cape_now',
-
-        # Asset Allocation
-        'wiz_equity_pct': 'equity_pct',
-        'wiz_bonds_pct': 'bonds_pct',
-        'wiz_real_estate_pct': 'real_estate_pct',
-        'wiz_glide_path': 'glide_path',
-        'wiz_equity_reduction': 'equity_reduction_per_year',
-
-        # Market Expectations
-        'wiz_equity_return': 'equity_return',
-        'wiz_bonds_return': 'bonds_return',
-        'wiz_real_estate_return': 'real_estate_return',
-        'wiz_cash_return': 'cash_return',
-        'wiz_equity_vol': 'equity_vol',
-        'wiz_bonds_vol': 'bonds_vol',
-        'wiz_real_estate_vol': 'real_estate_vol',
-        'wiz_inflation_rate': 'inflation_rate',
-
-        # Tax Planning
-        'wiz_selected_state': 'state',
-        'wiz_filing_status': 'filing_status',
-        'wiz_standard_deduction': 'standard_deduction',
-
-        # Social Security
-        'wiz_ss_primary_benefit': 'ss_primary_benefit',
-        'wiz_ss_primary_start_age': 'ss_primary_start_age',
-        'wiz_ss_spousal_benefit': 'ss_spousal_benefit',
-        'wiz_ss_spousal_start_age': 'ss_spousal_start_age',
-        'wiz_ss_funding_scenario': 'ss_funding_scenario',
-        'wiz_custom_reduction': 'ss_custom_reduction',
-        'wiz_reduction_start_year': 'ss_reduction_start_year',
-
-        # Guardrails
-        'wiz_lower_guardrail': 'lower_guardrail',
-        'wiz_upper_guardrail': 'upper_guardrail',
-        'wiz_spending_adjustment': 'spending_adjustment',
-        'wiz_max_increase': 'max_spending_increase',
-        'wiz_max_decrease': 'max_spending_decrease',
-        'wiz_spending_floor': 'spending_floor_real',
-        'wiz_spending_ceiling': 'spending_ceiling_real',
-        'wiz_floor_end_year': 'floor_end_year',
-
-        # AI Setup
-        'wiz_enable_ai': 'enable_ai',
-        'wiz_api_key': 'gemini_api_key',
-        'wiz_selected_model': 'gemini_model',
-
-        # Advanced Options
-        'wiz_college_enabled': 'college_enabled',
-        'wiz_college_amount': 'college_amount',
-        'wiz_college_years': 'college_years',
-        'wiz_college_start_year': 'college_start_year',
-        'wiz_inheritance_amount': 'inheritance_amount',
-        'wiz_inheritance_year': 'inheritance_year',
-        'wiz_market_regime': 'market_regime',
-        'wiz_num_simulations': 'num_simulations',
-        'wiz_cape_now_final': 'cape_now',
-    }
+    widget_mappings = get_wizard_widget_mappings()
 
     # Sync values from widget keys to wizard_params
     synced_count = 0
@@ -234,66 +129,7 @@ def initialize_wizard_state():
     # Initialize wizard_params if missing (can happen independently of wizard_step)
     if 'wizard_params' not in st.session_state:
         print(f"DEBUG [initialize_wizard_state]: Creating wizard_params...")
-        st.session_state.wizard_params = {
-            # Financial basics
-            'start_capital': 2_500_000,
-            'annual_spending': 100_000,
-            'retirement_age': 65,
-            'start_year': 2025,
-            'horizon_years': 50,
-
-            # Asset allocation
-            'equity_pct': 0.65,
-            'bonds_pct': 0.25,
-            'real_estate_pct': 0.08,
-            'cash_pct': 0.02,
-            'glide_path': True,
-            'equity_reduction_per_year': 0.005,
-
-            # Market assumptions
-            'equity_return': 0.0742,
-            'bonds_return': 0.0318,
-            'real_estate_return': 0.0563,
-            'cash_return': 0.0225,
-            'equity_vol': 0.1734,
-            'bonds_vol': 0.0576,
-            'real_estate_vol': 0.1612,
-            'cash_vol': 0.0096,
-            'inflation_rate': 0.025,
-
-            # Taxes
-            'state': 'CA',
-            'filing_status': 'MFJ',
-            'standard_deduction': 29200,
-
-            # Social Security
-            'ss_primary_benefit': 40000,
-            'ss_primary_start_age': 67,
-            'ss_spousal_benefit': 0,
-            'ss_spousal_start_age': 67,
-            'ss_funding_scenario': 'moderate',
-
-            # Guardrails
-            'lower_guardrail': 0.05,  # Cut spending above this
-            'upper_guardrail': 0.032, # Increase spending below this
-            'spending_adjustment': 0.10,
-            'max_spending_increase': 0.10,
-            'max_spending_decrease': 0.10,
-
-            # Cash flows
-            'income_streams': [],
-            'expense_streams': [],
-
-            # AI setup - will be loaded from config below
-            'enable_ai': False,
-            'gemini_api_key': '',
-            'gemini_model': 'gemini-2.5-pro',
-
-            # Advanced
-            'market_regime': 'baseline',
-            'num_simulations': 10000,
-            'cape_now': 28.0
-        }
+        st.session_state.wizard_params = get_default_wizard_params()
 
         # ONLY load UI config when creating wizard_params for first time
         print(f"DEBUG [initialize_wizard_state]: Loading UI config for first time wizard_params creation...")
@@ -352,60 +188,6 @@ def create_navigation_buttons():
                 st.session_state.wizard_step += 1
                 st.rerun()
 
-def create_allocation_pie_chart(equity, bonds, real_estate, cash):
-    """Create an interactive allocation pie chart"""
-    labels = ['Stocks/Equity', 'Bonds', 'Real Estate', 'Cash']
-    values = [equity * 100, bonds * 100, real_estate * 100, cash * 100]
-    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']
-
-    fig = go.Figure(data=[go.Pie(
-        labels=labels,
-        values=values,
-        hole=0.4,
-        marker_colors=colors,
-        textinfo='label+percent',
-        textposition='outside'
-    )])
-
-    fig.update_layout(
-        title="Your Portfolio Allocation",
-        font=dict(size=14),
-        height=400,
-        showlegend=False
-    )
-
-    return fig
-
-def create_risk_return_scatter():
-    """Create risk vs return visualization"""
-    assets = ['Cash', 'Bonds', 'Real Estate', 'Stocks']
-    returns = [2.25, 3.18, 5.63, 7.42]
-    risks = [0.96, 5.76, 16.12, 17.34]
-    colors = ['#96CEB4', '#4ECDC4', '#45B7D1', '#FF6B6B']
-
-    fig = go.Figure()
-
-    for i, asset in enumerate(assets):
-        fig.add_trace(go.Scatter(
-            x=[risks[i]],
-            y=[returns[i]],
-            mode='markers+text',
-            marker=dict(size=20, color=colors[i]),
-            text=asset,
-            textposition="top center",
-            name=asset,
-            showlegend=False
-        ))
-
-    fig.update_layout(
-        title="Asset Classes: Risk vs Expected Return",
-        xaxis_title="Volatility (Risk) %",
-        yaxis_title="Expected Return %",
-        height=400,
-        template="plotly_white"
-    )
-
-    return fig
 
 def step_welcome():
     """Welcome step"""
@@ -1829,12 +1611,15 @@ def step_social_security():
         if ss_spousal_benefit != st.session_state.wizard_params.get('ss_spousal_benefit'):
             st.session_state.wizard_params['ss_spousal_benefit'] = ss_spousal_benefit
 
+        # Initialize spousal start age with default value
+        ss_spousal_start_age = st.session_state.wizard_params.get('ss_spousal_start_age', 67)
+
         if ss_spousal_benefit > 0:
             ss_spousal_start_age = st.slider(
                 "Spouse Benefit Start Age",
                 min_value=62,
                 max_value=70,
-                value=st.session_state.wizard_params.get('ss_spousal_start_age', 67),
+                value=ss_spousal_start_age,
                 help="🎂 **Age when spouse starts collecting Social Security**\n\n• **Age 62**: Early claiming with benefit reduction\n• **Age 67**: Full retirement age benefits\n• **Age 70**: Maximum delayed retirement credits\n\n💡 **Coordination tip**: Spouses can claim at different ages to optimize household Social Security income.",
                 key="wiz_ss_spousal_start_age"
             )
@@ -2798,210 +2583,6 @@ st.markdown("""
 # Progress bar
 create_progress_bar()
 
-def convert_json_to_wizard_params(wizard_json: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Convert wizard JSON back to wizard parameters format.
-    This is the inverse of convert_wizard_to_json().
-    """
-    wizard_params = {}
-
-    # Basic parameters
-    basic = wizard_json.get('basic_params', {})
-    wizard_params.update({
-        'start_capital': basic.get('start_capital', 2_500_000),
-        'annual_spending': basic.get('annual_spending', 150_000),
-        'retirement_age': basic.get('retirement_age', 65),
-        'start_year': basic.get('start_year', 2025),
-        'horizon_years': basic.get('horizon_years', 50),
-    })
-
-    # Asset allocation
-    allocation = wizard_json.get('allocation', {})
-    wizard_params.update({
-        'equity_pct': allocation.get('equity_pct', 0.65),
-        'bonds_pct': allocation.get('bonds_pct', 0.25),
-        'real_estate_pct': allocation.get('real_estate_pct', 0.08),
-        'cash_pct': allocation.get('cash_pct', 0.02),
-        'glide_path': allocation.get('glide_path', False),
-        'equity_reduction_per_year': allocation.get('equity_reduction_per_year', 0.005),
-    })
-
-    # Market assumptions
-    market = wizard_json.get('market_assumptions', {})
-    wizard_params.update({
-        'equity_return': market.get('equity_return', 0.0742),
-        'bonds_return': market.get('bonds_return', 0.0318),
-        'real_estate_return': market.get('real_estate_return', 0.0563),
-        'cash_return': market.get('cash_return', 0.0225),
-        'equity_vol': market.get('equity_vol', 0.1734),
-        'bonds_vol': market.get('bonds_vol', 0.0576),
-        'real_estate_vol': market.get('real_estate_vol', 0.1612),
-        'cash_vol': market.get('cash_vol', 0.0096),
-        'inflation_rate': market.get('inflation_rate', 0.025),
-    })
-
-    # Taxes
-    taxes = wizard_json.get('taxes', {})
-    wizard_params.update({
-        'state': taxes.get('state', 'CA'),
-        'filing_status': taxes.get('filing_status', 'MFJ'),
-        'standard_deduction': taxes.get('standard_deduction', 29200),
-    })
-
-    # Social Security
-    ss = wizard_json.get('social_security', {})
-    wizard_params.update({
-        'ss_primary_benefit': ss.get('ss_primary_benefit', 40000),
-        'ss_primary_start_age': ss.get('ss_primary_start_age', 67),
-        'ss_spousal_benefit': ss.get('ss_spousal_benefit', 0),
-        'ss_spousal_start_age': ss.get('ss_spousal_start_age', 67),
-        'ss_funding_scenario': ss.get('ss_funding_scenario', 'conservative'),
-    })
-
-    # Guardrails
-    guardrails = wizard_json.get('guardrails', {})
-    wizard_params.update({
-        'lower_guardrail': guardrails.get('lower_guardrail', 0.05),
-        'upper_guardrail': guardrails.get('upper_guardrail', 0.032),
-        'spending_adjustment': guardrails.get('spending_adjustment', 0.10),
-        'max_spending_increase': guardrails.get('max_spending_increase', 0.10),
-        'max_spending_decrease': guardrails.get('max_spending_decrease', 0.10),
-    })
-
-    # Advanced options
-    advanced = wizard_json.get('advanced_options', {})
-    wizard_params.update({
-        'spending_floor_real': advanced.get('spending_floor_real', 120000),
-        'spending_ceiling_real': advanced.get('spending_ceiling_real', 200000),
-        'floor_end_year': advanced.get('floor_end_year', 2045),
-        'college_enabled': advanced.get('college_enabled', False),
-        'college_amount': advanced.get('college_amount', 70000),
-        'college_years': advanced.get('college_years', 8),
-        'college_start_year': advanced.get('college_start_year', 2032),
-        'inheritance_amount': advanced.get('inheritance_amount', 0),
-        'inheritance_year': advanced.get('inheritance_year', 2040),
-    })
-
-    # Simulation parameters
-    simulation = wizard_json.get('simulation', {})
-    wizard_params.update({
-        'market_regime': simulation.get('market_regime', 'baseline'),
-        'num_simulations': simulation.get('num_simulations', 10000),
-        'cape_now': simulation.get('cape_now', 25),
-    })
-
-    # AI config
-    ai = wizard_json.get('ai_config', {})
-    wizard_params.update({
-        'enable_ai': ai.get('enable_ai', False),
-        'gemini_api_key': ai.get('gemini_api_key', ''),
-        'gemini_model': ai.get('gemini_model', 'gemini-2.5-pro'),
-    })
-
-    # Cash flows (income and expense streams)
-    cash_flows = wizard_json.get('cash_flows', {})
-    wizard_params['income_streams'] = cash_flows.get('income_streams', [])
-    wizard_params['expense_streams'] = cash_flows.get('expense_streams', [])
-
-    return wizard_params
-
-
-def convert_flat_to_wizard_params(flat_params: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Convert flat Monte Carlo parameters to wizard parameters format.
-    This handles flat parameter files from Monte Carlo exports.
-    """
-    wizard_params = {}
-
-    # Direct mappings for basic parameters
-    wizard_params.update({
-        'start_capital': flat_params.get('start_capital', 2_500_000),
-        'annual_spending': flat_params.get('annual_spending', 150_000),
-        'retirement_age': 65,  # Default, not stored in flat format
-        'start_year': flat_params.get('start_year', 2025),
-        'horizon_years': flat_params.get('horizon_years', 50),
-    })
-
-    # Asset allocation (simulation names to wizard names)
-    wizard_params.update({
-        'equity_pct': flat_params.get('w_equity', 0.65),
-        'bonds_pct': flat_params.get('w_bonds', 0.25),
-        'real_estate_pct': flat_params.get('w_real_estate', 0.08),
-        'cash_pct': flat_params.get('w_cash', 0.02),
-        'glide_path': flat_params.get('glide_path_enabled', False),
-        'equity_reduction_per_year': flat_params.get('equity_reduction_per_year', 0.005),
-    })
-
-    # Market assumptions (simulation names to wizard names)
-    wizard_params.update({
-        'equity_return': flat_params.get('equity_mean', 0.0742),
-        'bonds_return': flat_params.get('bonds_mean', 0.0318),
-        'real_estate_return': flat_params.get('real_estate_mean', 0.0563),
-        'cash_return': flat_params.get('cash_mean', 0.0225),
-        'equity_vol': flat_params.get('equity_vol', 0.1734),
-        'bonds_vol': flat_params.get('bonds_vol', 0.0576),
-        'real_estate_vol': flat_params.get('real_estate_vol', 0.1612),
-        'cash_vol': flat_params.get('cash_vol', 0.0096),
-        'inflation_rate': flat_params.get('inflation_rate', 0.025),
-    })
-
-    # Taxes
-    wizard_params.update({
-        'state': 'CA',  # Default, state info not typically in flat params
-        'filing_status': flat_params.get('filing_status', 'MFJ'),
-        'standard_deduction': flat_params.get('standard_deduction', 29200),
-    })
-
-    # Social Security (simulation names to wizard names)
-    wizard_params.update({
-        'ss_primary_benefit': flat_params.get('ss_annual_benefit', 40000),
-        'ss_primary_start_age': flat_params.get('ss_start_age', 67),
-        'ss_spousal_benefit': flat_params.get('spouse_ss_annual_benefit', 0),
-        'ss_spousal_start_age': flat_params.get('spouse_ss_start_age', 67),
-        'ss_funding_scenario': flat_params.get('ss_benefit_scenario', 'conservative'),
-    })
-
-    # Guardrails (simulation names to wizard names)
-    wizard_params.update({
-        'lower_guardrail': flat_params.get('lower_wr', 0.05),
-        'upper_guardrail': flat_params.get('upper_wr', 0.032),
-        'spending_adjustment': flat_params.get('adjustment_pct', 0.10),
-        'max_spending_increase': 0.10,  # Default
-        'max_spending_decrease': 0.10,  # Default
-    })
-
-    # Advanced options
-    wizard_params.update({
-        'spending_floor_real': flat_params.get('spending_floor_real', 120000),
-        'spending_ceiling_real': flat_params.get('spending_ceiling_real', 200000),
-        'floor_end_year': flat_params.get('floor_end_year', 2045),
-        'college_enabled': flat_params.get('college_enabled', False),
-        'college_amount': flat_params.get('college_base_amount', 70000),
-        'college_years': 8,  # Default
-        'college_start_year': flat_params.get('college_start_year', 2032),
-        'inheritance_amount': flat_params.get('inherit_amount', 0),
-        'inheritance_year': flat_params.get('inherit_year', 2040),
-    })
-
-    # Simulation parameters
-    wizard_params.update({
-        'market_regime': flat_params.get('regime', 'baseline'),
-        'num_simulations': flat_params.get('num_sims', 10000),
-        'cape_now': flat_params.get('cape_now', 25),
-    })
-
-    # AI config - not typically in flat params
-    wizard_params.update({
-        'enable_ai': False,
-        'gemini_api_key': '',
-        'gemini_model': 'gemini-2.5-pro',
-    })
-
-    # Cash flows - simplified, flat params typically don't have complex cash flows
-    wizard_params['income_streams'] = []
-    wizard_params['expense_streams'] = []
-
-    return wizard_params
 
 
 st.markdown("---")

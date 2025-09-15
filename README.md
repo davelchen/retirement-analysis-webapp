@@ -34,67 +34,27 @@ streamlit run main.py
 ## ✨ Key Features
 
 ### 🧙‍♂️ **Interactive Setup Wizard**
-- **Step-by-step guidance** through all retirement planning parameters
-- **Comprehensive parameter persistence** - all 47+ widgets maintain values through navigation
-- **Age-aware validation** - intelligent horizon recommendations based on retirement age
-- **Beautiful visualizations** - pie charts, scatter plots, timelines
-- **Educational content** with parameter descriptions and best practices
-- **Real-time feedback** showing impact of your choices with smart warnings
-- **JSON save/load functionality** with complete parameter preservation
-- **Seamless handoff** to Monte Carlo analysis with one click
+- Step-by-step guidance with parameter persistence and age-aware validation
+- Beautiful visualizations and educational content with real-time feedback
+- JSON save/load with seamless handoff to Monte Carlo analysis
 
 ### 🎲 **Advanced Monte Carlo Engine**
-- Up to **50,000 simulations** with configurable market scenarios
-- **Tax-aware withdrawal calculations** using progressive brackets
-- **Guyton-Klinger guardrails** for dynamic spending adjustments
-- **Multiple asset classes** with customizable return assumptions
+- Up to 50,000 simulations with tax-aware withdrawals and Guyton-Klinger guardrails
+- Multiple asset classes with configurable market scenarios
 
-### 🎯 **Intelligent Tax Modeling**
-- **State tax integration** - 10 common states with combined federal+state rates
-- **Progressive tax brackets** with automatic updates when state changes
-- **Gross-up solver** automatically calculates pre-tax withdrawals
-- **Standard deduction** and filing status support
-- **Real-time tax impact** analysis in projections
+### 🏛️ **Enhanced Social Security & Tax Integration**
+- Retirement vs SS age distinction (retire any age, start SS 62-70)
+- 4 funding scenarios with 2034 trust fund modeling
+- 10-state tax integration with progressive brackets and gross-up solver
 
-### 🏛️ **Enhanced Social Security Integration**
-- **Retirement vs SS age distinction** - retire at any age, start SS separately (62-70)
-- **Comprehensive modeling** with primary and spousal benefits
-- **4 funding scenarios** based on 2024-2025 Trustees Report projections
-- **Trust fund timeline** modeling 2034 depletion with benefit cuts
-- **Year-by-year visibility** - SS income appears in detailed tables and CSV exports
-- **Cash flow integration** - SS income included in waterfall charts and summary statistics
-- **Tax-aware integration** - SS income reduces portfolio withdrawal requirements
-
-### 📊 **Rich Interactive UI**
-- **Comprehensive tooltips** for every parameter with usage guidance and examples
-- **Editable retirement age** - displayed in sidebar with real-time SS timing updates
-- **Precision decimal inputs** - guardrails support exact values like 0.028
-- **Dynamic expense management** - add/remove multi-year expense streams
-- **Multiple income streams** with flexible timing and duration
-- **Smart parameter validation** - prevents min/max errors when changing dates
-- **Real-time feedback** and helpful error messages with recovery suggestions
-
-### 📈 **Professional Visualizations**
-- **Interactive Plotly charts** with hover details
-- **Wealth distribution histograms** and percentile bands
-- **Withdrawal rate tracking** with guardrail visualization
-- **Year-by-year detailed tables** with real/nominal views
-- **Percentile path analysis** - P10/P50/P90 scenario selection for pessimistic, median, and optimistic projections
-
-### 💾 **Data Management**
-- **JSON parameter save/load** for scenario comparison
-- **CSV exports** for external analysis
-- **Comprehensive reporting** with summary statistics
-- **Reproducible results** with optional random seeds
-- **"Pick up where you left off"** - upload JSON files in wizard welcome page
+### 📊 **Professional UI & Visualizations**
+- Interactive Plotly charts with wealth distributions and percentile bands
+- Dynamic expense/income management with comprehensive tooltips
+- Year-by-year detailed tables and CSV exports
 
 ### 🤖 **AI-Powered Analysis**
-- **Google Gemini Integration** with manual trigger controls
-- **Multiple model options** - Gemini 2.5 Pro, Flash variants with performance descriptions
-- **Usage tracking** - real-time token consumption and daily quota monitoring
-- **Privacy protection** - comprehensive warnings about free tier data usage
-- **Interactive chat** - Q&A interface with context-aware responses about your results
-- **Smart error handling** - graceful fallbacks with detailed guidance
+- Google Gemini integration with usage tracking and privacy controls
+- Interactive chat for context-aware retirement plan insights
 
 ## 🏗️ Architecture & Structure
 
@@ -123,61 +83,30 @@ streamlit run main.py
 └── README.md                   # 📖 This file
 ```
 
-## 🆕 What's New (September 2025)
+## 🆕 Recent Updates
 
-### 🏛️ **Major Social Security Implementation Overhaul**
-- **Retirement vs SS Age Distinction**: Fixed hardcoded age=65 assumption - now uses actual retirement age for proper timing
-- **Year-by-Year SS Visibility**: SS income appears in detailed tables, CSV exports, and cash flow charts
-- **Enhanced Age Tooltips**: Clear explanations distinguishing retirement age from SS start age with strategy examples
-- **Summary Statistics**: Total SS income metrics displayed in simulation results
-- **Early Retirement Support**: Validated for scenarios like retire-at-45, SS-at-62 with proper 17-year delay
-
-### 📊 **UI Parameter Improvements**
-- **Editable Retirement Age**: Added to Monte Carlo sidebar with real-time SS timing updates
-- **Precision Decimal Inputs**: Fixed guardrail inputs to support exact values like 0.028 without formatting issues
-- **Smart Date Validation**: Prevents min/max errors when changing start year by using dynamic bounds
-- **Market Regime Consistency**: Synchronized regime names between wizard and simulation (recession_recover, late_recession, etc.)
-- **Real Estate Default**: Changed to disabled by default for cleaner user experience
-
-### 🔄 **Parameter Management & Architecture**
+- **Social Security Overhaul**: Retirement vs SS age distinction, year-by-year visibility
+- **UI Improvements**: Editable retirement age, precision decimal inputs, smart validation
+- **Enhanced JSON Support**: Auto-detection of wizard vs native formats with parameter mapping
 - **Universal Widget Persistence**: All 47+ wizard widgets maintain values through navigation
-- **Enhanced JSON Loading**: Support for both wizard nested JSON and simulation flat JSON formats
-- **Round-Trip Reliability**: Complete parameter lifecycle testing ensures data integrity
-- **Age-Aware Validation**: Smart horizon recommendations based on retirement age and longevity planning
 
-### JSON Compatibility Layer
-- **Auto-detection**: Wizard JSON (nested) vs Native JSON (flat) formats
-- **Parameter mapping**: 30+ parameter name conversions handled automatically
-- **Seamless handoff**: Parameters flow directly between wizard and analysis
-- **Backward compatibility**: Existing configuration files continue to work
+## 🎛️ Configuration
 
-## 🎛️ Configuration Options
-
-### 💼 **Portfolio Setup** 
-- **Start Capital**: $2.5M - $4M presets (or custom)
-- **Asset Allocation**: Equity/Bonds/Real Estate/Cash with validation
-- **Return Models**: Configurable means & volatilities per asset class
+### Portfolio & Spending
+- **Start Capital**: $2.5M-$4M presets with custom asset allocation
+- **Spending Methods**: CAPE-based (dynamic), Fixed annual, or Manual initial
+- **Guyton-Klinger Guardrails**: Upper/lower thresholds with automatic adjustments
 - **Market Regimes**: Baseline, Recession/Recovery, Grind-Lower scenarios
 
-### 💸 **Spending Framework**
-- **Three Spending Methods**: CAPE-based (with guardrails), Fixed annual (no guardrails), or Manual initial (legacy)
-- **CAPE-Based Initial Rate**: Dynamic withdrawal rate based on market valuation (1.75% + 0.5/CAPE)
-- **Guyton-Klinger Guardrails**: Upper/lower thresholds with automatic adjustments (CAPE & manual modes only)
-- **Spending Bounds**: Floor/ceiling limits with time constraints
-- **College Expenses**: Growing costs (2032-2041) with inflation adjustment
+### Income & Expenses
+- **Multi-year streams**: Overlapping expense/income periods with accurate timing
+- **College costs**: Growing expenses with inflation adjustment
+- **Inheritance**: Configurable lump sum timing
 
-### 🏠 **Income & Expenses**
-- **Multi-Year Expense Streams**: Comprehensive support for overlapping expense periods with accurate timing
-- **Multiple Income Streams**: Part-time work, consulting, board positions with proper start year/duration handling
-- **Real Estate Cash Flow**: Ramp or delayed income patterns
-- **Robust Stream Testing**: 240+ tests ensure accurate timing, edge case handling, and full simulation integration
-- **Inheritance Planning**: Configurable lump sum timing
-
-### 🧮 **Tax Configuration**
-- **Filing Status**: MFJ or Single with appropriate brackets
-- **Progressive Brackets**: 3-tier configurable system
-- **Standard Deduction**: Adjustable based on tax year
-- **Gross-Up Automation**: Solves for pre-tax withdrawal amounts
+### Tax Configuration
+- **10 State Support**: Combined federal+state rates with progressive brackets
+- **Filing Status**: MFJ or Single with standard deduction
+- **Gross-up automation**: Solves for pre-tax withdrawal amounts
 
 ## 📋 Default Scenario
 
@@ -190,200 +119,57 @@ The application includes a **realistic California family scenario** with:
 - **📚 Expenses**: College costs, home renovation, healthcare upgrades
 - **💼 Income**: Part-time consulting and board position income
 
-## 🚦 Usage Examples
+## 🚦 Usage
 
-### **Basic Retirement Analysis**
-1. **Configure Portfolio**: Set start capital and allocation weights
-2. **Set Spending Goals**: Define floor, ceiling, and guardrails  
-3. **Run Simulation**: Click "🚀 Run Simulation" for Monte Carlo analysis
-4. **Analyze Results**: Review success rates and wealth projections
+### Quick Start
+1. Configure portfolio and spending goals
+2. Run Monte Carlo simulation
+3. Analyze results and success rates
+4. Export data or save parameters as JSON
 
-### **Tax-Aware Planning**
-- **Optimize Withdrawals**: System automatically calculates gross withdrawals
-- **Compare Filing Status**: Test MFJ vs Single impact
-- **Bracket Planning**: Model different tax scenarios
-- **View Effective Rates**: Year-by-year tax burden analysis
+### Advanced Features
+- **Scenario Comparison**: Save/load JSON parameters to test variations
+- **AI Analysis**: Get Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey) for personalized insights
+- **Tax Planning**: Compare filing status and model different tax scenarios
 
-### **Scenario Comparison**
-- **Save Base Case**: Export parameters as JSON via Download button
-- **Test Variations**: Modify assumptions (market regime, spending, etc.)
-- **Load & Compare**: Upload JSON file and click "Load Parameters" button
-- **Export Results**: Download CSV data for external analysis
+## 🧪 Testing
 
-### **Advanced Modeling**
-- **Market Regime Testing**: Model recession, recovery, and grind scenarios
-- **Expense Planning**: Add multiple one-time expenses with custom timing
-- **Income Optimization**: Model part-time work and consulting income
-- **Inheritance Impact**: Test timing and amount sensitivity
+Run the comprehensive test suite with `pytest tests/ -v` (319+ tests covering simulation logic, tax calculations, UI integration, and data management).
 
-### **AI-Enhanced Analysis**
-- **Setup AI**: Enable AI analysis and enter free Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
-- **Manual Trigger**: Click "🧠 Run AI Analysis" button after running simulation for personalized insights
-- **Monitor Usage**: Track token consumption and daily quota with real-time warnings
-- **Interactive Chat**: Ask follow-up questions about your retirement plan with context-aware responses
-- **Privacy Control**: Review comprehensive warnings about free tier data usage before enabling
-
-## 🧪 Testing & Validation
-
-**256 comprehensive unit tests** covering all major functionality:
+## 🚀 Deployment
 
 ```bash
-# Run complete test suite
-pytest tests/ -v
-
-# Run with coverage report
-pytest --cov=. --cov-report=html tests/
-
-# Test specific module
-pytest tests/test_simulation.py -v
-```
-
-**Test Coverage Areas:**
-- ✅ **Monte Carlo Engine** (60+ tests): Simulation logic, guardrails, regimes, percentile paths, income/expense streams
-- ✅ **Tax Calculations** (30+ tests): Progressive brackets, gross-up solver, state taxes
-- ✅ **Data Management** (25+ tests): Parameter serialization, CSV exports, array length validation
-- ✅ **Deterministic Models** (16+ tests): Expected return projections, Social Security integration
-- ✅ **UI Integration** (40+ tests): Parameter conversion, wizard transitions, type safety
-- ✅ **AI Analysis** (25+ tests): Gemini integration, error handling, usage tracking
-- ✅ **App Functions** (15+ tests): State tax rates, Social Security calculations
-- ✅ **Stream Robustness** (10+ tests): Income/expense stream timing, overlaps, edge cases, full simulation integration
-- ✅ **Widget Persistence** (9+ tests): Streamlit widget behavior patterns, session state management, persistence validation
-- ✅ **Parameter Validation** (20+ tests): Input validation, edge cases, error handling
-
-## 🚀 Deployment & Configuration
-
-### Local Development
-```bash
-# Recommended: Use enhanced launcher
+# Local development (recommended)
 ./run.sh
 
-# Or run directly
-streamlit run main.py
-```
-
-### Production Deployment
-```bash
-# Custom port and host
+# Production
 streamlit run main.py --server.port 8080 --server.address 0.0.0.0
 
-# With configuration options
-streamlit run main.py --server.maxUploadSize=200 --server.maxMessageSize=200
-```
-
-### Docker Deployment
-```dockerfile
+# Docker
 FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 8501
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
+COPY requirements.txt . && RUN pip install -r requirements.txt
+COPY . . && EXPOSE 8501
 CMD ["streamlit", "run", "main.py", "--server.address=0.0.0.0"]
 ```
 
-### Environment Configuration
-```bash
-# Optional environment variables
-export STREAMLIT_SERVER_PORT=8501
-export STREAMLIT_SERVER_ADDRESS=0.0.0.0
-export STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+## 🔧 Technical Details
 
-# Personal configuration (auto-loads on startup)
-# Create default.json in project root (ignored by git)
-```
-
-## 🔧 Technical Architecture
-
-### **🎯 Design Principles**
 - **Pure Functions**: Simulation engine decoupled from UI for testability
-- **Real Dollar Foundation**: All calculations in real terms, nominal for display  
-- **Modular Components**: Easy to extend with new features
-- **Robust Numerics**: Bisection solver for tax gross-up calculations
-- **Performance Optimized**: Vectorized NumPy operations for large simulations
-
-### **📊 Mathematical Models**
+- **Real Dollar Foundation**: All calculations in real terms, nominal for display
 - **CAPE-Based Withdrawal**: `Initial Rate = 1.75% + 0.5 × (1/CAPE)`
-- **Guyton-Klinger Guardrails**: Dynamic spending based on withdrawal rate bands
-- **Progressive Taxation**: Multi-bracket system with gross-up automation
-- **Monte Carlo**: Correlated asset returns with regime-based adjustments
+- **Performance**: Small sims (<1K) <1s, Medium (≤10K) 2-5s, Large (≤50K) 10-30s
 
-### **⚡ Performance Benchmarks**
-- **Small Sims** (≤1,000): < 1 second  
-- **Medium Sims** (≤10,000): 2-5 seconds ⭐ *Recommended*
-- **Large Sims** (≤50,000): 10-30 seconds (high precision)
+## 🎨 Extensions
 
-## 🎨 Customization & Extensions
-
-The modular architecture supports easy customization:
-
-### **📈 New Asset Classes**
-```python
-# Add new asset class in simulation.py
-new_asset_mean = 0.045
-new_asset_vol = 0.12
-# Update allocation logic and UI
-```
-
-### **🧮 Enhanced Tax Models**
-```python
-# Extend tax.py for capital gains, Roth conversions
-def calculate_capital_gains_tax(gains, holding_period):
-    # Long-term vs short-term capital gains
-    pass
-
-def calculate_roth_conversion_tax(conversion_amount):
-    # Tax implications of Roth conversions
-    pass
-```
-
-### **📊 Additional Charts**
-```python
-# Add new visualizations in charts.py
-def create_risk_return_scatter(returns, risks):
-    # Custom Plotly chart
-    pass
-```
-
-### **💾 New Export Formats**
-```python
-# Extend io_utils.py for Excel, PDF exports
-def export_excel_workbook(results):
-    # Multi-sheet Excel export
-    pass
-```
+The modular architecture supports easy customization of asset classes (`simulation.py`), tax models (`tax.py`), visualizations (`charts.py`), and export formats (`io_utils.py`).
 
 ## ⚠️ Important Notes
 
-### **📚 Educational Purpose**
-- This tool is for **educational and personal use**
-- Tax calculations are **simplified models**
-- **Not a substitute** for professional financial advice
-- Results should be **validated with financial advisors**
+**Educational Use**: Simplified tax models, not a substitute for professional financial advice. Results should be validated with advisors.
 
-### **🔒 Privacy & Security**  
-- **No personal data** stored or transmitted
-- All calculations performed **locally**
-- Parameters can be saved/loaded as **local JSON files**
-- **Git ignored** personal configuration files
+**Privacy**: All calculations performed locally. No personal data stored or transmitted.
 
-### **🎯 Accuracy Considerations**
-- **Simplified tax model** (combined federal+state rates, basic brackets)
-- **State tax estimates** are rough approximations for retirement income
-- **Social Security projections** based on current Trustees Reports (2024-2025)
-- **Real estate** treated as REITs, not direct ownership
-- **Inflation assumptions** may vary from actual experience
-
-## 🤝 Contributing
-
-Contributions welcome! Areas for enhancement:
-
-- 📊 **Additional asset classes** (commodities, international bonds)
-- 🎨 **Enhanced visualizations** (risk/return charts, Monte Carlo paths)
-- 🧮 **Advanced tax modeling** (capital gains, Roth conversions)
-- 🔬 **Healthcare cost modeling** with inflation projections
-- 🌎 **International tax considerations** for expats
-- 📱 **Mobile responsive** design improvements
+**Accuracy**: Combined federal+state tax estimates, Social Security based on 2024-2025 Trustees Reports, real estate treated as REITs.
 
 ## 📄 License
 

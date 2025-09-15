@@ -97,13 +97,28 @@ class DeterministicProjector:
     
     def _get_other_income(self, year: int) -> float:
         """Get other income for given year (real dollars, net of tax)"""
-        if self.params.other_income_years == 0:
-            return 0
+        # Use multiple income streams if provided, otherwise fall back to single stream
+        if self.params.income_streams is not None and len(self.params.income_streams) > 0:
+            total_income = 0.0
+            for stream in self.params.income_streams:
+                stream_start = stream['start_year']
+                stream_years = stream['years']
+                stream_amount = stream['amount']
 
-        year_offset = year - self.params.other_income_start_year
-        if 0 <= year_offset < self.params.other_income_years:
-            return self.params.other_income_amount
-        return 0
+                year_offset = year - stream_start
+                if 0 <= year_offset < stream_years:
+                    total_income += stream_amount
+
+            return total_income
+        else:
+            # Legacy single stream logic
+            if self.params.other_income_years == 0:
+                return 0
+
+            year_offset = year - self.params.other_income_start_year
+            if 0 <= year_offset < self.params.other_income_years:
+                return self.params.other_income_amount
+            return 0
 
     def _get_social_security_income(self, year: int) -> float:
         """Get Social Security income for given year (real dollars, net of tax)"""
