@@ -4,7 +4,7 @@ A comprehensive **Streamlit multipage application** for retirement planning feat
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-Educational-green.svg)
-![Tests](https://img.shields.io/badge/tests-319%20passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-320%20tests-brightgreen.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.49+-red.svg)
 
 ## 🚀 Quick Start
@@ -67,28 +67,34 @@ streamlit run main.py
 ├── simulation.py               # 🎲 Monte Carlo simulation engine
 ├── deterministic.py            # 📊 Expected-return projections
 ├── tax.py                      # 💰 Tax calculations & gross-up solver
+├── tax_utils.py                # 🏛️ Social Security benefit calculations
 ├── charts.py                   # 📈 Plotly visualization builders
 ├── io_utils.py                 # 💾 Data import/export & JSON conversion
 ├── ai_analysis.py              # 🤖 Google Gemini AI integration & usage tracking
-├── tests/                      # 🧪 Comprehensive test suite (240+ tests)
+├── config_utils.py             # ⚙️ Configuration utilities & defaults
+├── wizard_charts.py            # 📊 Wizard-specific chart functions
+├── wizard_utils.py             # 🔧 Wizard parameter conversion utilities
+├── tests/                      # 🧪 Comprehensive test suite (320+ tests)
 │   ├── test_simulation.py      #     Core simulation tests
 │   ├── test_tax.py             #     Tax calculation tests
 │   ├── test_io.py              #     I/O and serialization tests
 │   ├── test_deterministic.py   #     Deterministic projection tests
-│   └── test_app_integration.py #     UI integration tests
+│   ├── test_app_integration.py #     UI integration tests
+│   ├── test_market_regimes.py  #     Market regime validation tests
+│   └── test_user_scenario_debug.py # Comprehensive scenario testing
 ├── run.sh                      # 🚀 Enhanced launcher script
 ├── requirements.txt            # 📦 Python dependencies
 ├── CLAUDE.md                   # 🤖 Technical documentation & context
-├── WIZARD_README.md            # 🧙‍♂️ Setup wizard documentation
 └── README.md                   # 📖 This file
 ```
 
 ## 🆕 Recent Updates
 
-- **Social Security Overhaul**: Retirement vs SS age distinction, year-by-year visibility
-- **UI Improvements**: Editable retirement age, precision decimal inputs, smart validation
-- **Enhanced JSON Support**: Auto-detection of wizard vs native formats with parameter mapping
-- **Universal Widget Persistence**: All 47+ wizard widgets maintain values through navigation
+- **Major Code Refactoring**: Extracted utility functions from giant files, improved maintainability
+- **Bug Fixes**: Fixed market regime parameter flow, income streams chart display, Social Security timeline
+- **Codebase Cleanup**: Removed 4,191 lines of obsolete code, cleaner project structure
+- **Enhanced Testing**: 320+ tests with 72% line coverage, comprehensive market regime validation
+- **Social Security Integration**: Full spousal benefits, funding scenarios, state tax modeling
 
 ## 🎛️ Configuration
 
@@ -134,7 +140,7 @@ The application includes a **realistic California family scenario** with:
 
 ## 🧪 Testing
 
-Run the comprehensive test suite with `pytest tests/ -v` (319+ tests covering simulation logic, tax calculations, UI integration, and data management).
+Run the comprehensive test suite with `pytest tests/ -v` (320+ tests covering simulation logic, tax calculations, UI integration, and data management).
 
 ## 🚀 Deployment
 
