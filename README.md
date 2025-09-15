@@ -100,7 +100,7 @@ streamlit run main.py
 
 ### Portfolio & Spending
 - **Start Capital**: $2.5M-$4M presets with custom asset allocation
-- **Spending Methods**: CAPE-based (dynamic), Fixed annual, or Manual initial
+- **Spending Methods**: CAPE-based (dynamic) or Fixed annual
 - **Guyton-Klinger Guardrails**: Upper/lower thresholds with automatic adjustments
 - **Market Regimes**: Baseline, Recession/Recovery, Grind-Lower scenarios
 
