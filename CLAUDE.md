@@ -147,13 +147,66 @@ pytest tests/test_simulation.py -v  # Specific module
 
 ## Critical Fixes & Patterns
 
-### Market Regime Parameter Flow
-**Fixed**: Missing `.get()` defaults caused regimes not to apply
-**Solution**: `regime=st.session_state.get('regime', 'baseline')` with proper fallbacks
+### Market Regime Parameter Flow Bug (CRITICAL)
+**Problem**: Missing `.get()` defaults caused market regimes to not apply in UI despite working in isolation
+**Location**: `pages/monte_carlo.py:483`
+```python
+# ❌ WRONG - causes regimes to silently fail
+regime = st.session_state.regime
 
-### CSV Export Array Length
-**Fixed**: Years array length mismatch in percentile bands export
-**Solution**: Use `results.wealth_paths.shape[1]` instead of calculated lengths
+# ✅ CORRECT - always use .get() with defaults
+regime = st.session_state.get('regime', 'baseline')
+```
+**Prevention**: Always use `.get()` with fallback defaults for all session state parameters
+
+### DataFrame Array Length Mismatch (CRITICAL)
+**Problem**: `ValueError: All arrays must be of the same length` in CSV exports
+**Root Cause**: `wealth_paths` includes t=0 (initial wealth) plus horizon years = N+1 elements
+```python
+# ❌ WRONG - assumes horizon_years length
+years = np.arange(start_year, start_year + horizon_years)
+
+# ✅ CORRECT - use actual data shape
+years = np.arange(start_year, start_year + results.wealth_paths.shape[1])
+```
+**Prevention**: Use dynamic sizing with actual array shapes, not calculated lengths
+
+### Income Streams Dual Architecture (IMPORTANT)
+**Context**: Both legacy single income and new multiple income streams must be supported
+- **New**: `income_streams` (list of dicts with start_year, years, amount)
+- **Legacy**: Single `other_income_*` parameters
+- **Both engines updated**: `simulation.py` ✅ and `deterministic.py` ✅
+**Pattern**: Always check for `income_streams` first, fallback to legacy parameters
+
+### Obsolete Files (NEVER RECREATE)
+**Deleted 4,191 lines** in major cleanup - these files should NEVER be recreated:
+- `wizard_app.py` (2,065 lines) - obsolete standalone wizard
+- `app_legacy.py` (1,816 lines) - obsolete standalone Monte Carlo
+- `WIZARD_README.md` (206 lines) - outdated documentation
+- `demo.py` (104 lines) - unused demo script
+
+### Code Refactoring Extraction Pattern
+**Phase 1 Complete**: Extracted utilities from giant `pages/wizard.py` (3,066→2,647 lines)
+- **Strategy**: Extract self-contained pure functions first, then dependent functions
+- **New modules**: `config_utils.py`, `wizard_charts.py`, `wizard_utils.py`
+- **Success pattern**: Zero-dependency utility functions are easiest to extract
+
+### Testing Performance Management
+**Long-running tests** (exclude for fast coverage):
+- `test_cape_vs_manual_different_results` (55s)
+- `test_manual_spending_override` (26s)
+- `test_cape_based_spending_default` (26s)
+**Fast coverage command**:
+```bash
+pytest --cov=. --cov-report=term -k "not (test_cape_vs_manual_different_results or test_manual_spending_override or test_cape_based_spending_default)"
+```
+**Result**: 72% coverage in 17s vs 2+ minutes for full suite
+
+### Supported Features Accuracy
+**Spending Methods** (only 2 supported, NOT 3):
+- ✅ `cape` (CAPE-based with guardrails)
+- ✅ `fixed` (Fixed annual amount)
+- ❌ **NOT SUPPORTED**: "Manual initial" (was incorrectly documented)
 
 ### Widget Persistence Race Conditions
 **Fixed**: Global sync overwrote immediate sync widgets
