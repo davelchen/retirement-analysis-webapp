@@ -180,23 +180,24 @@ class TestRetirementSimulator:
     
     def test_spending_guardrails(self):
         """Test Guyton-Klinger guardrails"""
-        params = SimulationParams(lower_wr=0.03, upper_wr=0.05, adjustment_pct=0.10)
+        # Use correct logic: lower_wr (5%) > upper_wr (3%)
+        params = SimulationParams(lower_wr=0.05, upper_wr=0.03, adjustment_pct=0.10)
         simulator = RetirementSimulator(params)
-        
-        # Test upper guardrail trigger
+
+        # Test lower guardrail trigger (spending cut when WR > 5%)
         portfolio_value = 1_000_000
-        current_spend = 60_000  # 6% WR
+        current_spend = 60_000  # 6% WR - above 5% threshold
         new_spend, action = simulator._apply_spending_guardrails(current_spend, portfolio_value)
         assert action == "down"
         assert abs(new_spend - 54_000) < 1  # 60k * 0.9
-        
-        # Test lower guardrail trigger  
-        current_spend = 25_000  # 2.5% WR
+
+        # Test upper guardrail trigger (spending increase when WR < 3%)
+        current_spend = 25_000  # 2.5% WR - below 3% threshold
         new_spend, action = simulator._apply_spending_guardrails(current_spend, portfolio_value)
         assert action == "up"
         assert abs(new_spend - 27_500) < 1  # 25k * 1.1
-        
-        # Test no guardrail trigger
+
+        # Test no guardrail trigger (4% WR - between 3% and 5%)
         current_spend = 40_000  # 4% WR
         new_spend, action = simulator._apply_spending_guardrails(current_spend, portfolio_value)
         assert action == "none"

@@ -20,7 +20,7 @@ class TestParameterPersistence:
         """Test that wizard JSON properly converts without data loss"""
         wizard_json = {
             "basic_params": {
-                "start_capital": 7500000,
+                "start_capital": 2500000,
                 "annual_spending": 250000,
                 "retirement_age": 65,
                 "horizon_years": 43
@@ -41,7 +41,7 @@ class TestParameterPersistence:
 
         # Test that key values are preserved (exact keys may vary by implementation)
         assert 'start_capital' in wizard_params
-        assert wizard_params['start_capital'] == 7500000
+        assert wizard_params['start_capital'] == 2500000
 
     def test_parameter_roundtrip_consistency(self):
         """Test that parameters survive save/load cycles"""

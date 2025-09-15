@@ -274,8 +274,8 @@ def initialize_wizard_state():
             'ss_funding_scenario': 'moderate',
 
             # Guardrails
-            'lower_guardrail': 0.03,
-            'upper_guardrail': 0.05,
+            'lower_guardrail': 0.05,  # Cut spending above this
+            'upper_guardrail': 0.032, # Increase spending below this
             'spending_adjustment': 0.10,
             'max_spending_increase': 0.10,
             'max_spending_decrease': 0.10,
@@ -1906,13 +1906,20 @@ def step_social_security():
     # Timing visualization
     st.markdown("### 📅 Benefit Timeline Visualization")
 
+    # Calculate current age properly from wizard parameters
+    retirement_age = st.session_state.wizard_params.get('retirement_age', 65)
+    start_year = st.session_state.wizard_params.get('start_year', 2025)
+    current_year = 2025  # Base year for calculation
+    current_age = retirement_age - (start_year - current_year)
+
     years = list(range(2025, 2065))
     primary_benefits = []
     spousal_benefits = []
 
     for year in years:
         # Primary benefits
-        if year >= 2025 + (ss_primary_start_age - 30):  # Assuming current age 30 for calculation
+        ss_start_year = current_year + (ss_primary_start_age - current_age)
+        if year >= ss_start_year:
             primary_annual = adjusted_benefit
 
             # Apply funding scenario
@@ -1931,7 +1938,8 @@ def step_social_security():
             primary_benefits.append(0)
 
         # Spousal benefits (simplified)
-        if ss_spousal_benefit > 0 and year >= 2025 + (ss_spousal_start_age - 30):
+        spousal_ss_start_year = current_year + (ss_spousal_start_age - current_age)
+        if ss_spousal_benefit > 0 and year >= spousal_ss_start_year:
             spousal_annual = ss_spousal_benefit
             # Apply same funding scenario
             if ss_funding_scenario == 'conservative' and year >= 2034:
@@ -2023,7 +2031,7 @@ def step_guardrails():
             "Lower Guardrail (Withdrawal Rate %)",
             min_value=0.0,
             max_value=5.0,
-            value=st.session_state.wizard_params.get('lower_guardrail', 0.03) * 100,  # Convert from decimal to %
+            value=st.session_state.wizard_params.get('lower_guardrail', 0.05) * 100,  # Convert from decimal to %
             step=0.1,
             help="If withdrawal rate exceeds this, cut spending",
             key="wiz_lower_guardrail"
@@ -2036,7 +2044,7 @@ def step_guardrails():
             "Upper Guardrail (Withdrawal Rate %)",
             min_value=0.0,
             max_value=5.0,
-            value=st.session_state.wizard_params.get('upper_guardrail', 0.05) * 100,  # Convert from decimal to %
+            value=st.session_state.wizard_params.get('upper_guardrail', 0.032) * 100,  # Convert from decimal to %
             step=0.1,
             help="If withdrawal rate falls below this, increase spending",
             key="wiz_upper_guardrail"
@@ -2127,9 +2135,21 @@ def step_guardrails():
             st.session_state.wizard_params['floor_end_year'] = floor_end_year
         st.markdown("### 📊 How Guardrails Work")
 
-        # Example scenarios
-        portfolio_values = [2000000, 1500000, 1000000]
-        base_spending = 100000
+        # Example scenarios using user's actual parameters
+        user_portfolio = st.session_state.wizard_params.get('start_capital', 2_500_000)
+
+        # Calculate spending based on user's method
+        spending_method = st.session_state.wizard_params.get('spending_method', 'cape')
+        if spending_method == 'cape':
+            cape_now = st.session_state.wizard_params.get('cape_now', 28.0)
+            cape_withdrawal_rate = (3.2 + 0.5 * (1.0 / cape_now)) / 100
+            user_spending = cape_withdrawal_rate * user_portfolio
+        else:
+            user_spending = st.session_state.wizard_params.get('annual_spending', 100_000)
+
+        # Show scenarios at different portfolio levels relative to user's starting point
+        portfolio_values = [user_portfolio, user_portfolio * 0.75, user_portfolio * 0.5]
+        base_spending = user_spending
 
         for portfolio in portfolio_values:
             withdrawal_rate = base_spending / portfolio * 100
@@ -2153,27 +2173,51 @@ def step_guardrails():
     # Interactive guardrails visualization
     st.markdown("### 📈 Guardrails in Action")
 
-    # Simulate market scenarios
-    years = list(range(2025, 2045))
+    # Get user's actual parameters for realistic simulation
+    user_start_capital = st.session_state.wizard_params.get('start_capital', 2_500_000)
+
+    # Calculate spending based on user's method
+    spending_method = st.session_state.wizard_params.get('spending_method', 'cape')
+    if spending_method == 'cape':
+        # Calculate CAPE-based spending if not already set
+        cape_now = st.session_state.wizard_params.get('cape_now', 28.0)
+        cape_withdrawal_rate = (3.2 + 0.5 * (1.0 / cape_now)) / 100
+        user_annual_spending = cape_withdrawal_rate * user_start_capital
+    else:
+        user_annual_spending = st.session_state.wizard_params.get('annual_spending', 100_000)
+
+    user_start_year = st.session_state.wizard_params.get('start_year', 2025)
+    user_horizon = min(st.session_state.wizard_params.get('horizon_years', 20), 20)  # Limit to 20 years for chart
+
+    # Get spending bounds parameters
+    spending_floor = st.session_state.wizard_params.get('spending_floor_real', 160_000)
+    spending_ceiling = st.session_state.wizard_params.get('spending_ceiling_real', 275_000)
+    floor_end_year = st.session_state.wizard_params.get('floor_end_year', 2041)
+
+    # Simulate market scenarios using user's timeframe
+    years = list(range(user_start_year, user_start_year + user_horizon))
     scenarios = {
         "Bull Market": [1.08] * len(years),
         "Bear Market": [0.92] * len(years),
-        "Volatile Market": [1.15, 0.85, 1.20, 0.80, 1.10, 0.90] * (len(years) // 6)
+        "Volatile Market": [1.15, 0.85, 1.20, 0.80, 1.10, 0.90] * (len(years) // 6 + 1)
     }
 
     fig = go.Figure()
 
     for scenario_name, returns in scenarios.items():
-        portfolio_values = [2500000]  # Starting value
-        spending_values = [100000]   # Starting spending
+        portfolio_values = [user_start_capital]  # User's actual starting portfolio
+        spending_values = [user_annual_spending]   # User's actual starting spending
 
         for i, annual_return in enumerate(returns[:len(years)-1]):
             # Apply return
             new_portfolio = portfolio_values[-1] * annual_return - spending_values[-1]
             portfolio_values.append(max(0, new_portfolio))
 
-            # Apply guardrails
+            # Determine spending for next year
+            current_year = years[i + 1]  # Year for this spending decision
+
             if new_portfolio > 0:
+                # Portfolio still has value - apply normal guardrails
                 wr = spending_values[-1] / new_portfolio
                 if wr > lower_guardrail:
                     new_spending = spending_values[-1] * (1 - spending_adjustment)
@@ -2181,9 +2225,23 @@ def step_guardrails():
                     new_spending = spending_values[-1] * (1 + min(spending_adjustment, max_increase))
                 else:
                     new_spending = spending_values[-1]
-                spending_values.append(max(new_spending, spending_values[-1] * (1 - max_decrease)))
+
+                # Apply max decrease constraint
+                new_spending = max(new_spending, spending_values[-1] * (1 - max_decrease))
             else:
-                spending_values.append(0)
+                # Portfolio depleted - significant spending reduction but not zero
+                # Apply maximum decrease allowed, then floor constraints
+                new_spending = spending_values[-1] * (1 - max_decrease)
+
+            # Apply spending bounds (floor and ceiling) regardless of portfolio status
+            # Apply floor only until floor_end_year
+            if current_year <= floor_end_year:
+                new_spending = max(new_spending, spending_floor)
+
+            # Apply ceiling always
+            new_spending = min(new_spending, spending_ceiling)
+
+            spending_values.append(new_spending)
 
         fig.add_trace(go.Scatter(
             x=years,
@@ -2803,8 +2861,8 @@ def convert_json_to_wizard_params(wizard_json: Dict[str, Any]) -> Dict[str, Any]
     # Guardrails
     guardrails = wizard_json.get('guardrails', {})
     wizard_params.update({
-        'lower_guardrail': guardrails.get('lower_guardrail', 0.03),
-        'upper_guardrail': guardrails.get('upper_guardrail', 0.05),
+        'lower_guardrail': guardrails.get('lower_guardrail', 0.05),
+        'upper_guardrail': guardrails.get('upper_guardrail', 0.032),
         'spending_adjustment': guardrails.get('spending_adjustment', 0.10),
         'max_spending_increase': guardrails.get('max_spending_increase', 0.10),
         'max_spending_decrease': guardrails.get('max_spending_decrease', 0.10),
@@ -2905,8 +2963,8 @@ def convert_flat_to_wizard_params(flat_params: Dict[str, Any]) -> Dict[str, Any]
 
     # Guardrails (simulation names to wizard names)
     wizard_params.update({
-        'lower_guardrail': flat_params.get('lower_wr', 0.03),
-        'upper_guardrail': flat_params.get('upper_wr', 0.05),
+        'lower_guardrail': flat_params.get('lower_wr', 0.05),
+        'upper_guardrail': flat_params.get('upper_wr', 0.032),
         'spending_adjustment': flat_params.get('adjustment_pct', 0.10),
         'max_spending_increase': 0.10,  # Default
         'max_spending_decrease': 0.10,  # Default

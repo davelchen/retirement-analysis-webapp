@@ -150,7 +150,9 @@ class TestWizardStateManagement:
         # Read the wizard file and check for unsafe patterns
         import re
 
-        with open('/Users/chenda/retirement-analysis-webapp/pages/wizard.py', 'r') as f:
+        import os
+        wizard_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'pages', 'wizard.py')
+        with open(wizard_path, 'r') as f:
             content = f.read()
 
         # Look for unsafe parameter READING patterns (excluding assignments)

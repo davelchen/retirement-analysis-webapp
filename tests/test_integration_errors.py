@@ -241,12 +241,14 @@ class TestGuardrailParameterErrors:
             lower = mock_session.wizard_params['lower_guardrail']
             upper = mock_session.wizard_params['upper_guardrail']
 
-            # Lower should be less than upper (for logical guardrails)
-            assert lower < upper, f"Guardrail defaults incorrect: lower({lower}) >= upper({upper})"
+            # Lower should be greater than upper (correct guardrail logic)
+            # lower_wr is the "high WR" threshold that triggers spending cuts
+            # upper_wr is the "low WR" threshold that triggers spending increases
+            assert lower > upper, f"Guardrail defaults incorrect: lower({lower}) <= upper({upper})"
 
             # Should be reasonable values
-            assert 0.02 <= lower <= 0.04  # 2-4%
-            assert 0.04 <= upper <= 0.06  # 4-6%
+            assert 0.04 <= lower <= 0.06  # 4-6% (high WR threshold)
+            assert 0.02 <= upper <= 0.04  # 2-4% (low WR threshold)
 
     def test_guardrail_slider_decimal_conversion(self):
         """Test decimal/percentage conversion in guardrail sliders"""

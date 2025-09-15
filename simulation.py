@@ -43,8 +43,8 @@ class SimulationParams:
     fixed_annual_spending: Optional[float] = None  # Fixed spending every year (overrides guardrails)
     
     # Guardrails (Guyton-Klinger style)
-    lower_wr: float = 0.028
-    upper_wr: float = 0.045
+    lower_wr: float = 0.045  # Cut spending above this (higher threshold)
+    upper_wr: float = 0.028  # Increase spending below this (lower threshold)
     adjustment_pct: float = 0.10
     
     # Spending bounds
@@ -282,15 +282,19 @@ class RetirementSimulator:
 
         return total_ss_income
     
-    def _apply_spending_guardrails(self, current_base_spend: float, 
+    def _apply_spending_guardrails(self, current_base_spend: float,
                                  portfolio_value: float) -> Tuple[float, str]:
         """Apply Guyton-Klinger guardrails to spending"""
-        current_wr = current_base_spend / portfolio_value if portfolio_value > 0 else 0
-        
-        if current_wr > self.params.upper_wr:
+        # If portfolio is zero or negative, guardrails don't apply
+        if portfolio_value <= 0:
+            return current_base_spend, "none"
+
+        current_wr = current_base_spend / portfolio_value
+
+        if current_wr > self.params.lower_wr:
             new_spend = current_base_spend * (1 - self.params.adjustment_pct)
             return new_spend, "down"
-        elif current_wr < self.params.lower_wr:
+        elif current_wr < self.params.upper_wr:
             new_spend = current_base_spend * (1 + self.params.adjustment_pct)
             return new_spend, "up"
         else:

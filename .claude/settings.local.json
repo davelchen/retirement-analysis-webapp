@@ -9,8 +9,8 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Read(//Users/chenda/Downloads/**)",
-      "Bash(python -m pytest tests/test_simulation.py::test_social_security_income_tracking -v)"
+      "Bash(python -m pytest tests/test_simulation.py::test_social_security_income_tracking -v)",
+      "Bash(python -m pytest tests/test_user_scenario_debug.py::TestUserScenarioDebug::test_user_config_recession_recover_basic -v)"
     ],
     "deny": [],
     "ask": []

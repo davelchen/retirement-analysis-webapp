@@ -295,8 +295,8 @@ def initialize_session_state():
         
         # CAPE and spending (California high cost of living)
         'cape_now': 32.0,  # Market-dependent
-        'lower_wr': 0.032,
-        'upper_wr': 0.050,
+        'lower_wr': 0.050,  # Cut spending above this
+        'upper_wr': 0.032,  # Increase spending below this
         'adjustment_pct': 0.10,
         'spending_floor_real': 120_000,  # CA minimum lifestyle
         'spending_ceiling_real': 200_000,  # Comfortable CA lifestyle
@@ -480,12 +480,12 @@ def get_current_params() -> SimulationParams:
         spouse_ss_enabled=st.session_state.get('spouse_ss_enabled', False),
         spouse_ss_annual_benefit=st.session_state.get('spouse_ss_annual_benefit', 30000),
         spouse_ss_start_age=st.session_state.get('spouse_ss_start_age', 67),
-        regime=st.session_state.regime,
-        custom_equity_shock_year=st.session_state.custom_equity_shock_year,
-        custom_equity_shock_return=st.session_state.custom_equity_shock_return,
-        custom_shock_duration=st.session_state.custom_shock_duration,
-        custom_recovery_years=st.session_state.custom_recovery_years,
-        custom_recovery_equity_return=st.session_state.custom_recovery_equity_return
+        regime=st.session_state.get('regime', 'baseline'),
+        custom_equity_shock_year=st.session_state.get('custom_equity_shock_year', 0),
+        custom_equity_shock_return=st.session_state.get('custom_equity_shock_return', -0.20),
+        custom_shock_duration=st.session_state.get('custom_shock_duration', 1),
+        custom_recovery_years=st.session_state.get('custom_recovery_years', 2),
+        custom_recovery_equity_return=st.session_state.get('custom_recovery_equity_return', 0.02)
     )
 
 
@@ -713,10 +713,10 @@ def create_sidebar():
                 st.session_state.lower_wr = float(lower_wr_str)
                 if st.session_state.lower_wr < 0 or st.session_state.lower_wr > 0.1:
                     st.error("Lower guardrail must be between 0.000 and 0.100")
-                    st.session_state.lower_wr = 0.028
+                    st.session_state.lower_wr = 0.045
             except ValueError:
-                st.error("Please enter a valid decimal number (e.g., 0.028)")
-                st.session_state.lower_wr = 0.028
+                st.error("Please enter a valid decimal number (e.g., 0.045)")
+                st.session_state.lower_wr = 0.045
 
             # Upper guardrail with text input for better decimal handling
             upper_wr_str = st.text_input(
@@ -729,10 +729,10 @@ def create_sidebar():
                 st.session_state.upper_wr = float(upper_wr_str)
                 if st.session_state.upper_wr < 0 or st.session_state.upper_wr > 0.1:
                     st.error("Upper guardrail must be between 0.000 and 0.100")
-                    st.session_state.upper_wr = 0.045
+                    st.session_state.upper_wr = 0.032
             except ValueError:
-                st.error("Please enter a valid decimal number (e.g., 0.045)")
-                st.session_state.upper_wr = 0.045
+                st.error("Please enter a valid decimal number (e.g., 0.032)")
+                st.session_state.upper_wr = 0.032
             st.session_state.adjustment_pct = st.number_input(
                 "Adjustment %", value=st.session_state.adjustment_pct, format="%.2f",
                 help="⚖️ **Spending adjustment magnitude**\n\nPercentage to increase/decrease spending when guardrails trigger. Typically 10-15%.",
@@ -1174,10 +1174,14 @@ def create_sidebar():
     regime_options = ['baseline', 'recession_recover', 'grind_lower', 'late_recession', 
                      'inflation_shock', 'long_bear', 'tech_bubble', 'custom']
     
-    st.session_state.regime = st.sidebar.selectbox(
+    # Ensure regime value is preserved from wizard or previous selections
+    current_regime = st.session_state.get('regime', 'baseline')
+    current_index = regime_options.index(current_regime) if current_regime in regime_options else 0
+
+    selected_regime = st.sidebar.selectbox(
         "Market Scenario",
         options=regime_options,
-        index=regime_options.index(st.session_state.regime) if st.session_state.regime in regime_options else 0,
+        index=current_index,
         help="📈 **Market scenario to model**\n\n"
              "**Baseline**: Expected returns throughout\n"
              "**Recession/Recover**: Early recession (-15% Yr1, 0% Yr2)\n"
@@ -1189,7 +1193,10 @@ def create_sidebar():
              "**Custom**: Configure your own shock timing",
         key="mc_regime"
     )
-    
+
+    # Update session state with selected regime
+    st.session_state.regime = selected_regime
+
     # Show regime descriptions
     regime_descriptions = {
         'baseline': "📊 Normal expected returns throughout retirement",
@@ -1328,6 +1335,143 @@ def run_simulations():
         
         st.session_state.last_params_hash = current_hash
         st.success("Simulations completed!")
+
+
+def display_parameter_preview():
+    """Display parameter preview with validation and diff analysis"""
+    try:
+        # Get current parameters
+        current_params = get_current_params()
+
+        with st.expander("🔍 **Simulation Parameters Preview**", expanded=True):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("**💰 Portfolio & Spending**")
+                st.write(f"• Start Capital: ${current_params.start_capital:,.0f}")
+                st.write(f"• Retirement Age: {current_params.retirement_age}")
+                st.write(f"• Horizon: {current_params.horizon_years} years")
+                st.write(f"• Simulations: {current_params.num_sims:,}")
+
+                st.markdown("**📊 Allocation**")
+                st.write(f"• Equity: {current_params.w_equity:.1%}")
+                st.write(f"• Bonds: {current_params.w_bonds:.1%}")
+                st.write(f"• Real Estate: {current_params.w_real_estate:.1%}")
+                st.write(f"• Cash: {current_params.w_cash:.1%}")
+
+            with col2:
+                st.markdown("**🏛️ Social Security**")
+                if current_params.social_security_enabled:
+                    st.write(f"• Primary: ${current_params.ss_annual_benefit:,.0f}/year at age {current_params.ss_start_age}")
+                    if current_params.spouse_ss_enabled:
+                        st.write(f"• Spousal: ${current_params.spouse_ss_annual_benefit:,.0f}/year at age {current_params.spouse_ss_start_age}")
+                    st.write(f"• Scenario: {current_params.ss_benefit_scenario}")
+                else:
+                    st.write("• Disabled")
+
+                st.markdown("**💸 Guardrails**")
+                st.write(f"• Lower: {current_params.lower_wr:.1%} (cut spending above this)")
+                st.write(f"• Upper: {current_params.upper_wr:.1%} (increase spending below this)")
+                st.write(f"• Adjustment: ±{current_params.adjustment_pct:.1%}")
+
+            # Validation warnings
+            warnings = validate_simulation_parameters(current_params)
+            if warnings:
+                st.markdown("**⚠️ Validation Warnings**")
+                for warning in warnings:
+                    st.warning(f"• {warning}")
+
+            # Parameter diff
+            if 'previous_simulation_params' in st.session_state:
+                changes = get_parameter_changes(st.session_state['previous_simulation_params'], current_params)
+                if changes:
+                    st.markdown("**🔄 Changes from Previous**")
+                    for change in changes:
+                        st.info(f"• {change}")
+                else:
+                    st.success("• No changes from previous simulation")
+
+        # Store current params for next diff
+        st.session_state['previous_simulation_params'] = current_params
+
+    except Exception as e:
+        st.error(f"Parameter preview error: {str(e)}")
+
+
+def validate_simulation_parameters(params):
+    """Return list of validation warnings for simulation parameters"""
+    warnings = []
+
+    # Check allocation sum (should already be caught, but double-check)
+    total_allocation = params.w_equity + params.w_bonds + params.w_real_estate + params.w_cash
+    if abs(total_allocation - 1.0) > 1e-6:
+        warnings.append(f"Allocation sums to {total_allocation:.3f}, not 1.0")
+
+    # Check reasonable ranges
+    if params.start_capital < 100_000:
+        warnings.append("Start capital seems low (< $100K)")
+    elif params.start_capital > 50_000_000:
+        warnings.append("Start capital seems very high (> $50M)")
+
+    # Check horizon vs age
+    final_age = params.retirement_age + params.horizon_years
+    if final_age < 80:
+        warnings.append(f"Simulation ends at age {final_age} - consider longer horizon")
+    elif final_age > 120:
+        warnings.append(f"Simulation ends at age {final_age} - very long horizon")
+
+    # Check guardrails
+    if params.lower_wr <= params.upper_wr:
+        warnings.append("Lower guardrail should be > upper guardrail")
+
+    # Check SS timing
+    if params.social_security_enabled:
+        if params.ss_start_age < 62:
+            warnings.append("Social Security start age < 62 (minimum eligibility)")
+        elif params.ss_start_age > 70:
+            warnings.append("Social Security start age > 70 (no benefit to delay)")
+
+    # Check simulation count
+    if params.num_sims < 1000:
+        warnings.append("Low simulation count - results may be unstable")
+    elif params.num_sims > 50000:
+        warnings.append("High simulation count - may be slow")
+
+    return warnings
+
+
+def get_parameter_changes(old_params, new_params):
+    """Return list of changes between parameter sets"""
+    changes = []
+
+    # Key parameters to check for changes
+    key_params = [
+        ('start_capital', 'Start Capital', lambda x: f"${x:,.0f}"),
+        ('retirement_age', 'Retirement Age', str),
+        ('horizon_years', 'Horizon', lambda x: f"{x} years"),
+        ('num_sims', 'Simulations', lambda x: f"{x:,}"),
+        ('w_equity', 'Equity %', lambda x: f"{x:.1%}"),
+        ('w_bonds', 'Bonds %', lambda x: f"{x:.1%}"),
+        ('ss_annual_benefit', 'SS Benefit', lambda x: f"${x:,.0f}"),
+        ('ss_start_age', 'SS Start Age', str),
+        ('lower_wr', 'Lower Guardrail', lambda x: f"{x:.1%}"),
+        ('upper_wr', 'Upper Guardrail', lambda x: f"{x:.1%}"),
+        ('regime', 'Market Regime', lambda x: x.replace('_', ' ').title()),
+    ]
+
+    for param_name, display_name, formatter in key_params:
+        if hasattr(old_params, param_name) and hasattr(new_params, param_name):
+            old_val = getattr(old_params, param_name)
+            new_val = getattr(new_params, param_name)
+
+            if old_val != new_val:
+                try:
+                    changes.append(f"{display_name}: {formatter(old_val)} → {formatter(new_val)}")
+                except (TypeError, ValueError, AttributeError):
+                    # Handle cases where formatter fails (e.g., Mock objects)
+                    changes.append(f"{display_name}: {old_val} → {new_val}")
+
+    return changes
 
 
 def display_summary_kpis():
@@ -2079,6 +2223,16 @@ with tab1:
     if abs(total_weight - 1.0) > 1e-6:
         st.error(f"⚠️ Allocation weights must sum to 1.0. Current sum: {total_weight:.3f}")
         st.stop()
+
+    # Parameter transparency toggle
+    show_preview = st.checkbox("🔍 Show Parameter Preview",
+                              value=st.session_state.get('show_param_preview', False),
+                              help="Preview simulation parameters, validation warnings, and changes before running")
+    st.session_state['show_param_preview'] = show_preview
+
+    # Parameter preview section
+    if show_preview:
+        display_parameter_preview()
 
     # Run simulation button
     if st.button("🚀 Run Simulation", type="primary"):

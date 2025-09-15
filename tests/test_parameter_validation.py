@@ -256,23 +256,25 @@ class TestParameterValidation:
         assert 0.5 <= params.w_equity <= 0.8    # Reasonable equity allocation
         assert params.ss_annual_benefit >= 0    # Non-negative
         assert params.lower_wr > 0              # Positive withdrawal rate
-        assert params.upper_wr > params.lower_wr  # Upper > Lower
+        assert params.lower_wr > params.upper_wr  # Correct guardrail logic: lower_wr > upper_wr
         assert params.num_sims >= 1000          # Reasonable simulation count
 
     def test_guardrail_logic_validation(self):
         """Test guardrail parameter logic is correct"""
 
         wizard_params = {
-            'lower_guardrail': 0.035,  # 3.5% - increase spending below this
-            'upper_guardrail': 0.055,  # 5.5% - decrease spending above this
+            'lower_guardrail': 0.055,  # 5.5% - decrease spending above this (high WR threshold)
+            'upper_guardrail': 0.035,  # 3.5% - increase spending below this (low WR threshold)
         }
 
         wizard_json = convert_wizard_to_json(wizard_params)
         flat_params = convert_wizard_json_to_simulation_params(wizard_json)
         params = dict_to_params(flat_params)
 
-        # Upper WR should be higher than lower WR (for spending cuts)
-        assert params.upper_wr > params.lower_wr, f"Guardrail logic error: upper_wr ({params.upper_wr}) should be > lower_wr ({params.lower_wr})"
+        # Lower WR should be higher than upper WR (correct guardrail logic)
+        # lower_wr = "high WR" threshold that triggers spending cuts (decrease spending above this)
+        # upper_wr = "low WR" threshold that triggers spending increases (increase spending below this)
+        assert params.lower_wr > params.upper_wr, f"Guardrail logic error: lower_wr ({params.lower_wr}) should be > upper_wr ({params.upper_wr})"
 
     def test_parameter_type_preservation(self):
         """Test that parameter types are preserved correctly"""

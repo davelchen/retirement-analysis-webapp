@@ -79,7 +79,7 @@ class TestSocialSecurityBenefit:
     def test_ss_benefit_before_start_age(self):
         """Test no benefit before start age"""
         benefit = calculate_social_security_benefit(
-            year=2030, start_year=2026, annual_benefit=40000,
+            year=2030, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='moderate', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -87,7 +87,7 @@ class TestSocialSecurityBenefit:
         assert benefit == 40000
 
         benefit = calculate_social_security_benefit(
-            year=2028, start_year=2026, annual_benefit=40000,
+            year=2028, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='moderate', custom_reduction=0.1,
             reduction_start_year=2034, start_age=69  # Start at 69
         )
@@ -95,7 +95,7 @@ class TestSocialSecurityBenefit:
         assert benefit == 0
 
         benefit = calculate_social_security_benefit(
-            year=2030, start_year=2026, annual_benefit=40000,
+            year=2030, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='moderate', custom_reduction=0.1,
             reduction_start_year=2034, start_age=69  # Start at 69
         )
@@ -106,7 +106,7 @@ class TestSocialSecurityBenefit:
         """Test conservative scenario with 19% cut"""
         # Before cuts
         benefit = calculate_social_security_benefit(
-            year=2033, start_year=2026, annual_benefit=40000,
+            year=2033, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='conservative', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -114,7 +114,7 @@ class TestSocialSecurityBenefit:
 
         # After cuts start
         benefit = calculate_social_security_benefit(
-            year=2035, start_year=2026, annual_benefit=40000,
+            year=2035, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='conservative', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -125,7 +125,7 @@ class TestSocialSecurityBenefit:
         """Test moderate scenario with gradual cuts"""
         # Before cuts
         benefit = calculate_social_security_benefit(
-            year=2033, start_year=2026, annual_benefit=40000,
+            year=2033, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='moderate', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -133,7 +133,7 @@ class TestSocialSecurityBenefit:
 
         # First year of cuts (2034) - should be 5% + 0% = 5%
         benefit = calculate_social_security_benefit(
-            year=2034, start_year=2026, annual_benefit=40000,
+            year=2034, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='moderate', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -142,7 +142,7 @@ class TestSocialSecurityBenefit:
 
         # Second year of cuts (2035) - should be 5% + 1% = 6%
         benefit = calculate_social_security_benefit(
-            year=2035, start_year=2026, annual_benefit=40000,
+            year=2035, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='moderate', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -151,7 +151,7 @@ class TestSocialSecurityBenefit:
 
         # Many years later - should cap at 10%
         benefit = calculate_social_security_benefit(
-            year=2050, start_year=2026, annual_benefit=40000,
+            year=2050, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='moderate', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -162,7 +162,7 @@ class TestSocialSecurityBenefit:
         """Test optimistic scenario with no cuts"""
         # Before cuts
         benefit = calculate_social_security_benefit(
-            year=2033, start_year=2026, annual_benefit=40000,
+            year=2033, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='optimistic', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -170,7 +170,7 @@ class TestSocialSecurityBenefit:
 
         # After cuts would start - no reduction
         benefit = calculate_social_security_benefit(
-            year=2040, start_year=2026, annual_benefit=40000,
+            year=2040, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='optimistic', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -182,7 +182,7 @@ class TestSocialSecurityBenefit:
 
         # Before cuts
         benefit = calculate_social_security_benefit(
-            year=2033, start_year=2026, annual_benefit=50000,
+            year=2033, start_year=2026, retirement_age=65, annual_benefit=50000,
             scenario='custom', custom_reduction=custom_reduction,
             reduction_start_year=2034, start_age=67
         )
@@ -190,7 +190,7 @@ class TestSocialSecurityBenefit:
 
         # After cuts start
         benefit = calculate_social_security_benefit(
-            year=2035, start_year=2026, annual_benefit=50000,
+            year=2035, start_year=2026, retirement_age=65, annual_benefit=50000,
             scenario='custom', custom_reduction=custom_reduction,
             reduction_start_year=2034, start_age=67
         )
@@ -201,7 +201,7 @@ class TestSocialSecurityBenefit:
         """Test different retirement start years"""
         # Start retirement in 2030
         benefit = calculate_social_security_benefit(
-            year=2037, start_year=2030, annual_benefit=35000,
+            year=2037, start_year=2030, retirement_age=65, annual_benefit=35000,
             scenario='moderate', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -214,7 +214,7 @@ class TestSocialSecurityBenefit:
         """Test edge cases and boundary conditions"""
         # Zero benefit amount
         benefit = calculate_social_security_benefit(
-            year=2035, start_year=2026, annual_benefit=0,
+            year=2035, start_year=2026, retirement_age=65, annual_benefit=0,
             scenario='conservative', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -222,7 +222,7 @@ class TestSocialSecurityBenefit:
 
         # Very high benefit amount
         benefit = calculate_social_security_benefit(
-            year=2030, start_year=2026, annual_benefit=100000,
+            year=2030, start_year=2026, retirement_age=65, annual_benefit=100000,
             scenario='optimistic', custom_reduction=0.1,
             reduction_start_year=2034, start_age=67
         )
@@ -230,7 +230,7 @@ class TestSocialSecurityBenefit:
 
         # Custom reduction of 0 (no cuts)
         benefit = calculate_social_security_benefit(
-            year=2040, start_year=2026, annual_benefit=40000,
+            year=2040, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='custom', custom_reduction=0.0,
             reduction_start_year=2034, start_age=67
         )
@@ -238,7 +238,7 @@ class TestSocialSecurityBenefit:
 
         # Maximum custom reduction
         benefit = calculate_social_security_benefit(
-            year=2040, start_year=2026, annual_benefit=40000,
+            year=2040, start_year=2026, retirement_age=65, annual_benefit=40000,
             scenario='custom', custom_reduction=0.5,  # 50% cut
             reduction_start_year=2034, start_age=67
         )

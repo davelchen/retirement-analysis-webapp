@@ -279,8 +279,8 @@ def convert_wizard_to_json(wizard_params: Dict[str, Any]) -> Dict[str, Any]:
             "custom_reduction_start_year": wizard_params.get('ss_reduction_start_year', 2034)
         },
         "guardrails": {
-            "lower_guardrail": wizard_params.get('lower_guardrail', 0.03),
-            "upper_guardrail": wizard_params.get('upper_guardrail', 0.05),
+            "lower_guardrail": wizard_params.get('lower_guardrail', 0.05),
+            "upper_guardrail": wizard_params.get('upper_guardrail', 0.032),
             "spending_adjustment": wizard_params.get('spending_adjustment', 0.1),
             "max_spending_increase": wizard_params.get('max_spending_increase', 0.05),
             "max_spending_decrease": wizard_params.get('max_spending_decrease', 0.2)
@@ -366,7 +366,8 @@ def convert_wizard_json_to_simulation_params(wizard_json: Dict[str, Any]) -> Dic
         'real_estate_vol': market.get('real_estate_vol', 0.1612),
         'cash_vol': market.get('cash_vol', 0.0096),
 
-        # Inflation rate is not stored in SimulationParams - it's handled separately
+        # Inflation rate is not stored in SimulationParams but needed for UI
+        'inflation_rate': market.get('inflation_rate', 0.025),
 
         # Taxes
         'filing_status': taxes.get('filing_status', 'MFJ'),
@@ -391,9 +392,9 @@ def convert_wizard_json_to_simulation_params(wizard_json: Dict[str, Any]) -> Dic
         'spending_ceiling_real': guardrails.get('spending_ceiling_real', 275_000),
         'floor_end_year': guardrails.get('floor_end_year', 2041),
 
-        # Guardrails - convert parameter names (fixed defaults: lower < upper)
-        'lower_wr': guardrails.get('lower_guardrail', 0.03),
-        'upper_wr': guardrails.get('upper_guardrail', 0.05),
+        # Guardrails - convert parameter names (correct defaults: lower > upper)
+        'lower_wr': guardrails.get('lower_guardrail', 0.05),
+        'upper_wr': guardrails.get('upper_guardrail', 0.032),
         'adjustment_pct': guardrails.get('spending_adjustment', 0.10),
 
         # Simulation parameters
